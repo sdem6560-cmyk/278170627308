@@ -7,10 +7,13 @@ interface SidebarLeftProps {
   thoughts: AIThought[];
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
+  isVisible?: boolean;
 }
 
-export const SidebarLeft: React.FC<SidebarLeftProps> = ({ thoughts, messages, onSendMessage }) => {
+export const SidebarLeft: React.FC<SidebarLeftProps> = ({ thoughts, messages, onSendMessage, isVisible = true }) => {
   const [inputValue, setInputValue] = React.useState('');
+
+  if (!isVisible) return null;
 
   const handleSend = () => {
     if (inputValue.trim()) {

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Zap, ShieldAlert, Settings, Target as TargetIcon, Radio, ChevronLeft, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Zap, ShieldAlert, Settings, Target as TargetIcon, Radio, ChevronLeft, SlidersHorizontal, Filter, Layers } from 'lucide-react';
 import { Target, ArsenalItem, RadarEvent } from '../types';
 
 interface SidebarRightProps {
@@ -10,6 +10,7 @@ interface SidebarRightProps {
   radar: RadarEvent[];
   onUpdateParam?: (itemId: string, paramId: string, newValue: any) => void;
   onAction?: (action: string) => void;
+  isVisible?: boolean;
 }
 
 export const SidebarRight: React.FC<SidebarRightProps> = ({ 
@@ -19,11 +20,32 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
   arsenal,
   radar,
   onUpdateParam,
-  onAction
+  onAction,
+  isVisible = true
 }) => {
   const [tuningItemId, setTuningItemId] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<'none' | 'os' | 'status'>('none');
+
+  if (!isVisible) return null;
 
   const tuningItem = arsenal.find(i => i.id === tuningItemId);
+
+  const groupedTargets = useMemo(() => {
+    if (groupBy === 'none') return { 'الكل': targets };
+    
+    return targets.reduce((acc, target) => {
+      let key = 'أخرى';
+      if (groupBy === 'os') {
+        key = target.os ? target.os.split(' ')[0] : 'غير معروف';
+      } else if (groupBy === 'status') {
+        key = target.status === 'online' ? 'متصل' : target.status === 'scanning' ? 'جاري المسح' : 'غير متصل';
+      }
+      
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(target);
+      return acc;
+    }, {} as Record<string, Target[]>);
+  }, [targets, groupBy]);
 
   return (
     <aside className="w-full md:w-[280px] bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col shrink-0 overflow-hidden glass-panel relative z-20">
@@ -126,32 +148,76 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
                 <TargetIcon size={14} className="text-[var(--accent-cyan)]" />
                 <span>الأهداف النشطة</span>
               </div>
-              <span className="bg-[var(--bg-input)] px-2.5 py-0.5 rounded-full text-[9px] text-[var(--accent-cyan)] border border-[rgba(0,240,255,0.2)] font-mono">{targets.length}</span>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-[var(--bg-input)] rounded-md border border-[var(--border-color)] p-0.5">
+                  <button 
+                    onClick={() => setGroupBy('none')}
+                    className={`p-1 rounded ${groupBy === 'none' ? 'bg-[var(--accent-cyan)] text-[var(--bg-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+                    title="No Grouping"
+                  >
+                    <Filter size={10} />
+                  </button>
+                  <button 
+                    onClick={() => setGroupBy('os')}
+                    className={`p-1 rounded ${groupBy === 'os' ? 'bg-[var(--accent-cyan)] text-[var(--bg-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+                    title="Group by OS"
+                  >
+                    <Layers size={10} />
+                  </button>
+                  <button 
+                    onClick={() => setGroupBy('status')}
+                    className={`p-1 rounded ${groupBy === 'status' ? 'bg-[var(--accent-cyan)] text-[var(--bg-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+                    title="Group by Status"
+                  >
+                    <Radio size={10} />
+                  </button>
+                </div>
+                <span className="bg-[var(--bg-input)] px-2.5 py-0.5 rounded-full text-[9px] text-[var(--accent-cyan)] border border-[rgba(0,240,255,0.2)] font-mono">{targets.length}</span>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-              {targets.map(target => (
-                <div 
-                  key={target.id}
-                  onClick={() => onTargetSelect(target.id)}
-                  className={`flex items-center gap-4 md:gap-3 p-3.5 md:p-2.5 rounded-[var(--radius-lg)] md:rounded-[var(--radius-md)] mb-2 md:mb-1 cursor-pointer transition-all duration-300 border-r-4 relative overflow-hidden group ${
-                    activeTargetId === target.id 
-                      ? 'bg-[rgba(0,240,255,0.1)] border-r-[var(--accent-cyan)] shadow-[inset_0_0_15px_rgba(0,240,255,0.05)]' 
-                      : 'border-r-transparent hover:bg-[rgba(255,255,255,0.04)]'
-                  }`}
-                >
-                  <div className="absolute inset-0 bg-linear-to-r from-transparent via-[rgba(0,240,255,0.03)] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                  <div className={`w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor] ${
-                    target.status === 'online' ? 'text-[var(--accent-green)] bg-[var(--accent-green)]' : 
-                    target.status === 'scanning' ? 'text-[var(--accent-orange)] bg-[var(--accent-orange)] animate-pulse' : 
-                    'text-[var(--text-muted)] bg-[var(--text-muted)]'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-[12px] font-bold font-mono transition-colors ${activeTargetId === target.id ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-primary)]'}`}>
-                      {target.name}
+              {(Object.entries(groupedTargets) as [string, Target[]][]).map(([groupName, groupTargets]) => (
+                <div key={groupName} className="mb-4">
+                  {groupBy !== 'none' && (
+                    <div className="px-2 py-1 mb-2 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] border-b border-[rgba(255,255,255,0.05)] flex justify-between items-center">
+                      <span>{groupName}</span>
+                      <span className="opacity-50">{groupTargets.length}</span>
                     </div>
-                    <div className="hidden md:block text-[10px] text-[var(--text-muted)] font-medium truncate">{target.ip} {target.os && `| ${target.os}`}</div>
-                    <div className="md:hidden text-[10px] text-[var(--text-muted)] font-mono">{target.ip}</div>
-                  </div>
+                  )}
+                  {groupTargets.map(target => (
+                    <div 
+                      key={target.id}
+                      onClick={() => onTargetSelect(target.id)}
+                      className={`flex items-center gap-4 md:gap-3 p-3.5 md:p-2.5 rounded-[var(--radius-lg)] md:rounded-[var(--radius-md)] mb-2 md:mb-1 cursor-pointer transition-all duration-300 border-r-4 relative overflow-hidden group ${
+                        activeTargetId === target.id 
+                          ? 'bg-[rgba(0,240,255,0.1)] border-r-[var(--accent-cyan)] shadow-[inset_0_0_15px_rgba(0,240,255,0.05)]' 
+                          : 'border-r-transparent hover:bg-[rgba(255,255,255,0.04)]'
+                      }`}
+                    >
+                      <div className="absolute inset-0 bg-linear-to-r from-transparent via-[rgba(0,240,255,0.03)] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                      <div className={`w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor] ${
+                        target.status === 'online' ? 'text-[var(--accent-green)] bg-[var(--accent-green)]' : 
+                        target.status === 'scanning' ? 'text-[var(--accent-orange)] bg-[var(--accent-orange)] animate-pulse' : 
+                        'text-[var(--text-muted)] bg-[var(--text-muted)]'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[12px] font-bold font-mono transition-colors ${activeTargetId === target.id ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-primary)]'}`}>
+                          {target.name}
+                        </div>
+                        <div className="hidden md:block text-[10px] text-[var(--text-muted)] font-medium truncate">{target.ip} {target.os && `| ${target.os}`}</div>
+                        <div className="md:hidden text-[10px] text-[var(--text-muted)] font-mono">{target.ip}</div>
+                        {activeTargetId === target.id && target.ports && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {target.ports.map((port, idx) => (
+                              <span key={port} className="text-[8px] font-mono px-1.5 py-0.5 bg-[rgba(0,240,255,0.1)] text-[var(--accent-cyan)] rounded border border-[rgba(0,240,255,0.2)]" title={target.services?.[idx]}>
+                                {port}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

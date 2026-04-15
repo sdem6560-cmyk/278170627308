@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldAlert, Terminal as TerminalIcon, Globe, Lock, Zap } from 'lucide-react';
+import { ShieldAlert, Terminal as TerminalIcon, Globe, Lock, Zap, Brain, Bug, Target as TargetIcon } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { SidebarRight } from './components/SidebarRight';
 import { SidebarLeft } from './components/SidebarLeft';
@@ -11,97 +11,104 @@ import { NetworkMap } from './components/NetworkMap';
 import { Vault } from './components/Vault';
 import { Sniffer } from './components/Sniffer';
 import { PayloadGenerator } from './components/PayloadGenerator';
+import { ZeroDayLab } from './components/ZeroDayLab';
 import { SystemStatus } from './components/SystemStatus';
 import { MasterControl } from './components/MasterControl';
 import { NeuralCoPilot } from './components/NeuralCoPilot';
 import { SettingsModal } from './components/SettingsModal';
 import { BottomBar } from './components/BottomBar';
-import { Phase, TerminalLine, ChatMessage, AIThought, Target, ArsenalItem, RadarEvent, IOC, Credential, Vulnerability } from './types';
-import { getAIResponse, getSystemThoughts } from './services/geminiService';
+import { Phase, Target, ArsenalItem, RadarEvent, Credential, Vulnerability, Session, LayoutConfig } from './types';
+import { DEFAULT_MASTER_CONFIG, DESTRUCTIVE_COMMANDS, DEFAULT_LAYOUT_CONFIG } from './constants';
+import { useTerminal } from './hooks/useTerminal';
+import { useThreatIntelligence } from './hooks/useThreatIntelligence';
+import { useAI } from './hooks/useAI';
+import { getAIResponse, getSystemThoughts, getAutonomousAction } from './services/geminiService';
+import { fetchShodanDetails, fetchVirusTotalReport } from './services/threatIntelService';
+
+// Memoized components for performance
+const MemoizedTopBar = React.memo(TopBar);
+const MemoizedBottomBar = React.memo(BottomBar);
+const MemoizedSystemStatus = React.memo(SystemStatus);
+const MemoizedNeuralCoPilot = React.memo(NeuralCoPilot);
 
 // Helper for unique IDs - moved outside to be stable
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
 export default function App() {
   // State
-  const [phase, setPhase] = useState<Phase>('ENUM');
+  const [phase, setPhase] = useState<Phase>('RECON');
   const [connected, setConnected] = useState(true);
   const [opCount, setOpCount] = useState(124);
   const [autopilot, setAutopilot] = useState(true);
   const [activeTargetId, setActiveTargetId] = useState<string | null>(() => {
     return localStorage.getItem('sentinel_activeTargetId') || 't1';
   });
-  const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD'>(() => {
+  const [isBooting, setIsBooting] = useState(true);
+  const [bootProgress, setBootProgress] = useState(0);
+  const [bootLogs, setBootLogs] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'ZERODAY'>(() => {
     return (localStorage.getItem('sentinel_activeTab') as any) || 'TERMINAL';
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [iocs, setIocs] = useState<IOC[]>([]);
   const [threatLevel, setThreatLevel] = useState(34);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
-
-  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>(() => {
-    const saved = localStorage.getItem('sentinel_terminalLines');
-    const initial = [
-      { id: 'sys-1', type: 'system', content: 'Sentinel OS v4.2.0 initialized...', timestamp: '04:34:50' },
-      { id: 'sys-2', type: 'info', content: 'Establishing secure connection to neural network...', timestamp: '04:34:51' },
-      { id: 'sys-3', type: 'success', content: 'Connection established. Autonomous mode standby.', timestamp: '04:34:52' },
-      { id: 'sys-4', type: 'warning', content: 'FULL SYSTEM ACTIVATION SIGNAL RECEIVED.', timestamp: '04:34:53' },
-      { id: 'sys-5', type: 'ai', content: 'Autopilot engaged. Neural link established. Commencing full-scale operation...', timestamp: '04:34:54' },
-    ];
-    if (!saved) return initial as TerminalLine[];
-    try {
-      const parsed = JSON.parse(saved);
-      // Migration: Ensure unique IDs for old data
-      return parsed.map((l: any, i: number) => ({
-        ...l,
-        id: l.id.includes('-') ? l.id : `${l.id}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
-      }));
-    } catch {
-      return initial as TerminalLine[];
-    }
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [isAutonomous, setIsAutonomous] = useState(false);
+  const [lastAiThought, setLastAiThought] = useState<string>('جاري تهيئة العقل الاصطناعي...');
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [masterConfig, setMasterConfig] = useState<string>(() => {
+    return localStorage.getItem('sentinel_master_config') || JSON.stringify(DEFAULT_MASTER_CONFIG);
+  });
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
+    const saved = localStorage.getItem('sentinel_auto_update');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [updateInterval, setUpdateInterval] = useState(() => {
+    const saved = localStorage.getItem('sentinel_update_interval');
+    return saved !== null ? JSON.parse(saved) : 60;
+  });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>(() => {
+    const saved = localStorage.getItem('sentinel_layout_config');
+    return saved ? JSON.parse(saved) : DEFAULT_LAYOUT_CONFIG;
   });
 
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('sentinel_chatMessages');
-    const initial = [
-      { id: 'chat-1', role: 'ai', text: 'تم تفعيل جميع الأنظمة. الطيار الآلي نشط الآن ويقود العمليات. جاري مسح الشبكة بالكامل ورصد التهديدات العالمية.', timestamp: '04:34:50' },
-    ];
-    if (!saved) return initial as ChatMessage[];
-    try {
-      const parsed = JSON.parse(saved);
-      return parsed.map((m: any, i: number) => ({
-        ...m,
-        id: m.id.includes('-') ? m.id : `${m.id}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
-      }));
-    } catch {
-      return initial as ChatMessage[];
-    }
-  });
-
-  const [aiThoughts, setAiThoughts] = useState<AIThought[]>(() => {
-    const saved = localStorage.getItem('sentinel_aiThoughts');
-    const initial = [
-      { id: 'th-1', type: 'analysis', text: 'تم اكتشاف 3 نقاط ضعف محتملة في جدار الحماية الرئيسي للهدف.', timestamp: '04:34:55' },
-      { id: 'th-2', type: 'prediction', text: 'من المتوقع أن يتم تجاوز نظام كشف التسلل (IDS) خلال 15 دقيقة في حال تفعيل الطيار الآلي.', timestamp: '04:35:00' },
-    ];
-    if (!saved) return initial as AIThought[];
-    try {
-      const parsed = JSON.parse(saved);
-      return parsed.map((t: any, i: number) => ({
-        ...t,
-        id: t.id.includes('-') ? t.id : `${t.id}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
-      }));
-    } catch {
-      return initial as AIThought[];
-    }
-  });
+  // Custom Hooks
+  const { terminalLines, addTerminalLine, clearTerminal } = useTerminal();
+  const { iocs, setIocs } = useThreatIntelligence(autoUpdateEnabled, updateInterval, addTerminalLine);
+  const { chatMessages, aiThoughts, handleAction, updateThoughts, setChatMessages, setAiThoughts } = useAI();
 
   const [targets, setTargets] = useState<Target[]>([
-    { id: 't1', name: 'Mainframe_Alpha', ip: '192.168.1.45', status: 'online', os: 'Linux Kernel 5.15' },
-    { id: 't2', name: 'DB_Server_01', ip: '192.168.1.102', status: 'scanning' },
+    { 
+      id: 't1', 
+      name: 'Mainframe_Alpha', 
+      ip: '192.168.1.45', 
+      status: 'online', 
+      os: 'Linux Kernel 5.15',
+      ports: [22, 80, 443, 8080],
+      services: ['OpenSSH 8.2p1', 'Apache 2.4.41', 'Nginx 1.18.0', 'Tomcat 9.0.31']
+    },
+    { 
+      id: 't2', 
+      name: 'DB_Server_01', 
+      ip: '192.168.1.102', 
+      status: 'scanning',
+      ports: [3306, 5432],
+      services: ['MySQL 8.0.23', 'PostgreSQL 13.2']
+    },
     { id: 't3', name: 'Gateway_Node', ip: '10.0.0.1', status: 'offline' },
-    { id: 't4', name: 'server_db_03', ip: '192.168.1.150', status: 'online', os: 'Windows Server 2022' },
+    { 
+      id: 't4', 
+      name: 'server_db_03', 
+      ip: '192.168.1.150', 
+      status: 'online', 
+      os: 'Windows Server 2022',
+      ports: [445, 3389, 5985],
+      services: ['SMB', 'RDP', 'WinRM']
+    },
   ]);
 
   const [arsenal, setArsenal] = useState<ArsenalItem[]>([
@@ -145,7 +152,40 @@ export default function App() {
         { id: 'p8', name: 'Output Format', value: 'text', type: 'select', options: ['text', 'json', 'csv'] }
       ]
     },
-    { id: 'a5', name: 'ProxyChains', desc: 'توجيه الحركة عبر وكلاء', type: 'util' },
+    { 
+      id: 'a5', 
+      name: 'SQL_Injector_Pro', 
+      desc: 'استغلال ثغرات حقن قواعد البيانات', 
+      type: 'exploit',
+      params: [
+        { id: 'p9', name: 'Method', value: 'GET', type: 'select', options: ['GET', 'POST', 'HEADER'] },
+        { id: 'p10', name: 'Payload', value: 'Boolean-based', type: 'select', options: ['Boolean-based', 'Error-based', 'Union-based', 'Time-based'] },
+        { id: 'p11', name: 'Depth', value: 5, type: 'number' }
+      ]
+    },
+    { 
+      id: 'a6', 
+      name: 'XSS_Reflector', 
+      desc: 'حقن نصوص برمجية في المتصفح', 
+      type: 'exploit',
+      params: [
+        { id: 'p12', name: 'Type', value: 'Reflected', type: 'select', options: ['Stored', 'Reflected', 'DOM-based'] },
+        { id: 'p13', name: 'Bypass WAF', value: true, type: 'toggle' },
+        { id: 'p14', name: 'Payload Type', value: 'Alert', type: 'select', options: ['Alert', 'Cookie Stealer', 'Keylogger'] }
+      ]
+    },
+    { 
+      id: 'a7', 
+      name: 'PrivEsc_Suite', 
+      desc: 'رفع صلاحيات المستخدم للنظام', 
+      type: 'post',
+      params: [
+        { id: 'p15', name: 'Target OS', value: 'Linux', type: 'select', options: ['Linux', 'Windows', 'macOS'] },
+        { id: 'p16', name: 'Aggressive', value: false, type: 'toggle' },
+        { id: 'p17', name: 'Exploit DB Sync', value: true, type: 'toggle' }
+      ]
+    },
+    { id: 'a8', name: 'ProxyChains', desc: 'توجيه الحركة عبر وكلاء', type: 'util' },
   ]);
 
   const updateArsenalParam = (itemId: string, paramId: string, newValue: any) => {
@@ -203,76 +243,39 @@ export default function App() {
 
   // Periodic thoughts update
   useEffect(() => {
-    // Initial IOC generation
-    const initialIocs: IOC[] = [
-      { id: 'ioc-1', type: 'IP', value: '185.244.25.102', source: 'AlienVault', severity: 'critical', timestamp: new Date().toLocaleTimeString() },
-      { id: 'ioc-2', type: 'DOMAIN', value: 'malicious-update.com', source: 'OTX', severity: 'high', timestamp: new Date().toLocaleTimeString() },
-      { id: 'ioc-3', type: 'HASH', value: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', source: 'MISP', severity: 'medium', timestamp: new Date().toLocaleTimeString() },
-    ];
-    setIocs(initialIocs);
-
-    // Initial Hacker Data
-    setCredentials([
-      { id: 'c1', targetId: 't1', username: 'admin', password: 'password123', type: 'ssh', timestamp: '04:35:10' },
-      { id: 'c2', targetId: 't4', username: 'db_user', hash: 'e10adc3949ba59abbe56e057f20f883e', type: 'db', timestamp: '05:12:45' }
-    ]);
-    setVulnerabilities([
-      { id: 'v1', cve: 'CVE-2023-1234', severity: 'critical', description: 'Remote Code Execution in OpenSSH', status: 'detected' },
-      { id: 'v2', cve: 'CVE-2024-5678', severity: 'high', description: 'SQL Injection in Database Gateway', status: 'exploited' }
-    ]);
-
     const interval = setInterval(async () => {
       // Update threat level
       setThreatLevel(prev => Math.min(100, Math.max(0, prev + (Math.random() * 10 - 5))));
 
       // Update thoughts
-      const newThoughts = await getSystemThoughts();
-      if (newThoughts && newThoughts.length > 0) {
-        const formattedThoughts = newThoughts.map((t: any) => ({
-          id: generateId(),
-          type: t.type,
-          text: t.text,
-          timestamp: new Date().toLocaleTimeString().split(' ')[0],
-        }));
-        setAiThoughts(prev => [...formattedThoughts, ...prev].slice(0, 20));
-      }
-
-      // Simulate new IOCs if feeds are enabled
-      const savedFeeds = localStorage.getItem('sentinel_threat_feeds');
-      const enabledFeeds = savedFeeds ? JSON.parse(savedFeeds).filter((f: any) => f.enabled) : [];
-      
-      if (enabledFeeds.length > 0 && Math.random() > 0.7) {
-        const feed = enabledFeeds[Math.floor(Math.random() * enabledFeeds.length)];
-        const types: IOC['type'][] = ['IP', 'DOMAIN', 'HASH', 'URL'];
-        const severities: IOC['severity'][] = ['low', 'medium', 'high', 'critical'];
-        
-        const newIoc: IOC = {
-          id: generateId(),
-          type: types[Math.floor(Math.random() * types.length)],
-          value: `simulated-${Math.random().toString(36).substring(7)}`,
-          source: feed.name,
-          severity: severities[Math.floor(Math.random() * severities.length)],
-          timestamp: new Date().toLocaleTimeString()
-        };
-        setIocs(prev => [newIoc, ...prev].slice(0, 50));
-        addTerminalLine(`New IOC detected from ${feed.name}: ${newIoc.type} ${newIoc.value}`, 'warning');
-      }
-    }, 60000); // Every 60 seconds
+      updateThoughts(phase, threatLevel, arsenal);
+    }, autoUpdateEnabled ? updateInterval * 1000 : 60000);
     return () => clearInterval(interval);
-  }, []);
-
-  // Handlers
-  const addTerminalLine = useCallback((content: string, type: TerminalLine['type'] = 'output') => {
-    const newLine: TerminalLine = {
-      id: generateId(),
-      type,
-      content,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-    setTerminalLines(prev => [...prev, newLine]);
-  }, []);
+  }, [autoUpdateEnabled, updateInterval, activeTargetId, updateThoughts]);
 
   const handleCommand = (cmd: string) => {
+    const isDestructive = DESTRUCTIVE_COMMANDS.some(d => cmd.toLowerCase().includes(d));
+
+    if (isDestructive && !pendingCommand) {
+      setPendingCommand(cmd);
+      setIsConfirmModalOpen(true);
+      return;
+    }
+
+    setPendingCommand(null);
+    setIsConfirmModalOpen(false);
+
+    // Validation: RECON must be completed before offensive actions
+    const offensiveCommands = ['scan', 'exploit', 'vulnscan', 'brute', 'deploy', 'exfiltrate'];
+    const isOffensive = offensiveCommands.some(c => cmd.toLowerCase().startsWith(c));
+
+    if (phase === 'RECON' && isOffensive) {
+      addTerminalLine(cmd, 'command');
+      addTerminalLine(`ERROR: Offensive action '${cmd}' blocked. RECON phase must be completed first.`, 'error');
+      addTerminalLine("Use 'recon' to initiate reconnaissance protocol.", 'info');
+      return;
+    }
+
     addTerminalLine(cmd, 'command');
     
     // Simple command simulation
@@ -281,9 +284,11 @@ export default function App() {
         addTerminalLine('AVAILABLE COMMANDS:', 'info');
         addTerminalLine('  recon     - Start deep reconnaissance protocol', 'system');
         addTerminalLine('  scan      - Scan local network for targets', 'system');
+        addTerminalLine('  scan_deep - Thorough network scan with stealth bypass', 'system');
         addTerminalLine('  vulnscan  - Run vulnerability scan on current target', 'system');
         addTerminalLine('  brute     - Start brute force attack on target', 'system');
         addTerminalLine('  exploit   - Attempt to exploit current target', 'system');
+        addTerminalLine('  exploit_auto - Automated multi-vector exploitation', 'system');
         addTerminalLine('  exfiltrate- Start secure data exfiltration', 'system');
         addTerminalLine('  login     - Attempt remote login as user', 'system');
         addTerminalLine('  andrax    - Initialize ANDRAX Mobile Suite', 'system');
@@ -294,11 +299,17 @@ export default function App() {
         addTerminalLine('  targets   - Manage Active Targets', 'system');
         addTerminalLine('  whoami    - Show current operator identity', 'system');
         addTerminalLine('  ai        - Open Neural Co-pilot Interface', 'system');
+        addTerminalLine('  zeroday   - Access Zero-Day Research Lab', 'error');
         addTerminalLine('  terminal  - Switch to Main Terminal', 'system');
         addTerminalLine('  settings  - Open System Settings', 'system');
         addTerminalLine('  status    - Show system status', 'system');
+        addTerminalLine('  sessions  - List active Meterpreter/Shell sessions', 'system');
+        addTerminalLine('  report    - Generate operation summary report', 'system');
         addTerminalLine('  clear     - Clear terminal output', 'system');
+        addTerminalLine('  live      - Start live full-scale operation', 'error');
         addTerminalLine('  exit      - Terminate secure session', 'system');
+      } else if (cmd.toLowerCase() === 'live') {
+        startLiveOperation();
       } else if (cmd.toLowerCase().startsWith('deploy')) {
         const type = cmd.split(' ')[1] || 'payload';
         addTerminalLine(`Deploying ${type} to target...`, 'warning');
@@ -308,16 +319,51 @@ export default function App() {
           setPhase('EXPLOIT');
         }, 2000);
       } else if (cmd.toLowerCase() === 'scan') {
-        addTerminalLine('Starting network scan...', 'info');
+        const target = targets.find(t => t.id === activeTargetId);
+        addTerminalLine(`Starting Nmap 7.92 ( https://nmap.org ) at ${new Date().toLocaleString()}`, 'info');
+        addTerminalLine(`Scanning ${target?.name} (${target?.ip})...`, 'info');
         setPhase('ENUM');
-        setTimeout(() => addTerminalLine('Scan complete. Found 2 new services.', 'success'), 2000);
-      } else if (cmd.toLowerCase() === 'exploit') {
-        addTerminalLine('Bypassing firewall...', 'info');
+        
         setTimeout(() => {
-          addTerminalLine('Exploit successful! Root access granted.', 'success');
+          addTerminalLine(`Nmap scan report for ${target?.name} (${target?.ip})`, 'system');
+          addTerminalLine('Host is up (0.002s latency).', 'system');
+          addTerminalLine('Not shown: 996 closed ports', 'system');
+          addTerminalLine('PORT     STATE SERVICE    VERSION', 'system');
+          target?.ports?.forEach((port, index) => {
+            addTerminalLine(`${port}/tcp   open  ${target.services?.[index] || 'unknown'}`, 'system');
+          });
+          addTerminalLine('Scan complete. Found services identified.', 'success');
+        }, 2000);
+      } else if (cmd.toLowerCase() === 'scan_deep') {
+        addTerminalLine('Initiating deep stealth scan...', 'warning');
+        setPhase('ENUM');
+        setTimeout(() => {
+          addTerminalLine('Bypassing IDPS filters...', 'info');
+          setTimeout(() => {
+            addTerminalLine('Deep scan complete. Hidden nodes identified: 10.0.5.12, 10.0.5.14', 'success');
+            setOpCount(prev => prev + 2);
+          }, 2000);
+        }, 1500);
+      } else if (cmd.toLowerCase() === 'exploit') {
+        const target = targets.find(t => t.id === activeTargetId);
+        addTerminalLine(`[*] Attempting to exploit ${target?.name}...`, 'info');
+        addTerminalLine(`[*] Using exploit/multi/handler with payload meterpreter_reverse_tcp`, 'system');
+        addTerminalLine(`[*] Sending stage (175174 bytes) to ${target?.ip}`, 'system');
+        
+        setTimeout(() => {
+          addTerminalLine(`[+] Exploit successful! Meterpreter session 1 opened (${target?.ip}:4444)`, 'success');
           setPhase('EXPLOIT');
           setOpCount(prev => prev + 1);
           
+          const newSession: Session = {
+            id: generateId(),
+            targetId: activeTargetId || 't1',
+            type: 'meterpreter',
+            status: 'active',
+            openedAt: new Date().toLocaleTimeString()
+          };
+          setSessions(prev => [newSession, ...prev]);
+
           // Add captured credential
           const newCred: Credential = {
             id: generateId(),
@@ -328,8 +374,22 @@ export default function App() {
             timestamp: new Date().toLocaleTimeString()
           };
           setCredentials(prev => [newCred, ...prev]);
-          addTerminalLine(`NEW CREDENTIAL HARVESTED: ${newCred.username}:${newCred.password}`, 'ai');
+          addTerminalLine(`[!] NEW CREDENTIAL HARVESTED: ${newCred.username}:${newCred.password}`, 'ai');
         }, 2000);
+      } else if (cmd.toLowerCase() === 'exploit_auto') {
+        addTerminalLine('Initiating automated exploitation sequence...', 'warning');
+        setTimeout(() => {
+          addTerminalLine('Scanning for known vulnerabilities...', 'info');
+          setTimeout(() => {
+            addTerminalLine('Vulnerability CVE-2024-1234 identified. Launching payload...', 'info');
+            setTimeout(() => {
+              addTerminalLine('Exploit successful! Multi-node access established.', 'success');
+              setPhase('EXPLOIT');
+              setOpCount(prev => prev + 3);
+              addTerminalLine('3 new targets compromised.', 'ai');
+            }, 2000);
+          }, 1500);
+        }, 1000);
       } else if (cmd.toLowerCase().startsWith('vulnscan')) {
         const target = cmd.split(' ')[1] || 'current';
         addTerminalLine(`Initiating vulnerability scan on ${target}...`, 'info');
@@ -343,6 +403,33 @@ export default function App() {
           };
           setVulnerabilities(prev => [newVuln, ...prev]);
           addTerminalLine(`VULNERABILITY DETECTED: ${newVuln.cve} (${newVuln.severity})`, 'error');
+
+          // Threat Intel Integration
+          const shodanKey = localStorage.getItem('sentinel_shodan_key');
+          const vtKey = localStorage.getItem('sentinel_vt_key');
+
+          if (shodanKey || vtKey) {
+            addTerminalLine('Enriching vulnerability data with external threat intelligence...', 'info');
+            
+            if (shodanKey) {
+              const target = targets.find(t => t.id === activeTargetId);
+              if (target?.ip) {
+                fetchShodanDetails(target.ip).then(details => {
+                  if (details) {
+                    addTerminalLine(`[SHODAN]: Found ${details.data?.length || 0} services and ${details.vulns?.length || 0} vulnerabilities for ${target.ip}`, 'success');
+                  }
+                });
+              }
+            }
+
+            if (vtKey) {
+              fetchVirusTotalReport(newVuln.cve).then(report => {
+                if (report) {
+                  addTerminalLine(`[VIRUSTOTAL]: CVE ${newVuln.cve} has a community score of ${report.data?.attributes?.last_analysis_stats?.malicious || 0} malicious detections.`, 'warning');
+                }
+              });
+            }
+          }
         }, 3000);
       } else if (cmd.toLowerCase().startsWith('brute')) {
         const target = cmd.split(' ')[1] || '192.168.1.102';
@@ -380,8 +467,33 @@ export default function App() {
         addTerminalLine(`  THREAT_LEVEL: ${Math.round(threatLevel)}%`, 'system');
         addTerminalLine(`  CREDENTIALS_HARVESTED: ${credentials.length}`, 'system');
         addTerminalLine(`  VULNERABILITIES_DETECTED: ${vulnerabilities.length}`, 'system');
+        addTerminalLine(`  ACTIVE_SESSIONS: ${sessions.length}`, 'system');
         addTerminalLine(`  AUTOPILOT: ${autopilot ? 'ACTIVE' : 'DISABLED'}`, 'system');
         addTerminalLine('  ENCRYPTION: AES-256-GCM', 'system');
+      } else if (cmd.toLowerCase() === 'sessions') {
+        addTerminalLine('ACTIVE SESSIONS:', 'info');
+        if (sessions.length === 0) {
+          addTerminalLine('  No active sessions found.', 'system');
+        } else {
+          addTerminalLine('  ID  TYPE         TARGET           STATUS    OPENED_AT', 'system');
+          sessions.forEach((s, i) => {
+            const target = targets.find(t => t.id === s.targetId);
+            addTerminalLine(`  ${i+1}   ${s.type.padEnd(12)} ${target?.name.padEnd(16)} ${s.status.padEnd(9)} ${s.openedAt}`, 'system');
+          });
+        }
+      } else if (cmd.toLowerCase() === 'report') {
+        addTerminalLine('GENERATING OPERATION SUMMARY REPORT...', 'info');
+        setTimeout(() => {
+          addTerminalLine('----------------------------------------', 'system');
+          addTerminalLine(`OPERATOR: sdem6560@gmail.com`, 'system');
+          addTerminalLine(`TIMESTAMP: ${new Date().toLocaleString()}`, 'system');
+          addTerminalLine(`TOTAL OPERATIONS: ${opCount}`, 'system');
+          addTerminalLine(`COMPROMISED TARGETS: ${credentials.length}`, 'success');
+          addTerminalLine(`CRITICAL VULNERABILITIES: ${vulnerabilities.length}`, 'error');
+          addTerminalLine(`ACTIVE THREAT LEVEL: ${Math.round(threatLevel)}%`, 'warning');
+          addTerminalLine('----------------------------------------', 'system');
+          addTerminalLine('Report saved to encrypted storage.', 'success');
+        }, 1500);
       } else if (cmd.toLowerCase().startsWith('login')) {
         const user = cmd.split(' ')[1] || 'admin';
         addTerminalLine(`Attempting remote login as ${user}...`, 'info');
@@ -406,6 +518,9 @@ export default function App() {
       } else if (cmd.toLowerCase() === 'ai') {
         addTerminalLine('Opening Neural Co-pilot Interface...', 'info');
         setActiveTab('AI');
+      } else if (cmd.toLowerCase() === 'zeroday') {
+        addTerminalLine('Accessing Zero-Day Research Lab... UNRESTRICTED ACCESS GRANTED.', 'error');
+        setActiveTab('ZERODAY');
       } else if (cmd.toLowerCase() === 'terminal') {
         addTerminalLine('Switching to Main Terminal...', 'info');
         setActiveTab('TERMINAL');
@@ -415,7 +530,10 @@ export default function App() {
       } else if (cmd.toLowerCase() === 'recon') {
         addTerminalLine('Initiating deep reconnaissance protocol...', 'info');
         setPhase('RECON');
-        setTimeout(() => addTerminalLine('Reconnaissance complete. Target surface mapped.', 'success'), 2000);
+        setTimeout(() => {
+          addTerminalLine('Reconnaissance complete. Target surface mapped.', 'success');
+          setPhase('ENUM');
+        }, 2000);
       } else if (cmd.toLowerCase() === 'exfiltrate') {
         addTerminalLine('Starting secure data exfiltration...', 'warning');
         setPhase('EXFIL');
@@ -430,86 +548,275 @@ export default function App() {
           window.location.reload();
         }, 1000);
       } else if (cmd.toLowerCase() === 'clear') {
-        setTerminalLines([]);
+        clearTerminal();
       } else {
         addTerminalLine(`Command not found: ${cmd}`, 'error');
       }
     }, 500);
   };
 
-  const handleSendMessage = async (text: string) => {
-    const userMsg: ChatMessage = {
-      id: generateId(),
-      role: 'user',
-      text,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-    setChatMessages(prev => [...prev, userMsg]);
-
-    // Gemini API response
-    const history = chatMessages.map(m => ({
-      role: m.role === 'user' ? 'user' : 'model' as const,
-      parts: [{ text: m.text }]
-    }));
-
-    const responseText = await getAIResponse(text, history);
+  const startLiveOperation = useCallback(() => {
+    if (isLiveMode) return;
+    setIsLiveMode(true);
+    addTerminalLine('================================================', 'warning');
+    addTerminalLine('   INITIATING LIVE FULL-SCALE OPERATION', 'error');
+    addTerminalLine('================================================', 'warning');
     
-    const aiMsg: ChatMessage = {
-      id: generateId(),
-      role: 'ai',
-      text: responseText || 'لا يوجد رد من النظام.',
-      timestamp: new Date().toLocaleTimeString(),
-    };
-    setChatMessages(prev => [...prev, aiMsg]);
-  };
+    const sequence = [
+      { cmd: 'recon', delay: 1000 },
+      { cmd: 'scan_deep', delay: 3000 },
+      { cmd: 'vulnscan', delay: 6000 },
+      { cmd: 'exploit_auto', delay: 10000 },
+      { cmd: 'exfiltrate', delay: 15000 },
+      { cmd: 'report', delay: 20000 }
+    ];
+
+    sequence.forEach(step => {
+      setTimeout(() => {
+        handleCommand(step.cmd);
+      }, step.delay);
+    });
+
+    setTimeout(() => {
+      setIsLiveMode(false);
+      addTerminalLine('LIVE OPERATION COMPLETED. ALL TARGETS SECURED.', 'success');
+    }, 25000);
+  }, [isLiveMode, handleCommand, addTerminalLine]);
 
   const toggleAutopilot = () => {
     setAutopilot(!autopilot);
     addTerminalLine(`Autopilot mode ${!autopilot ? 'ENABLED' : 'DISABLED'}`, !autopilot ? 'warning' : 'info');
     
     if (!autopilot) {
-      const thought: AIThought = {
+      setAiThoughts(prev => [{
         id: generateId(),
         type: 'alert',
         text: 'تم تفعيل الطيار الآلي. النظام الآن يتحكم في جميع العمليات الهجومية.',
         timestamp: new Date().toLocaleTimeString(),
-      };
-      setAiThoughts(prev => [thought, ...prev]);
+      }, ...prev]);
     }
   };
 
-  const handleAction = (action: string) => {
+  // Boot Sequence
+  useEffect(() => {
+    const logs = [
+      'SENTINEL_OS v4.2.0-STABLE',
+      'INITIALIZING KERNEL MODULES...',
+      'LOADING NEURAL_CO_PILOT_CORE...',
+      'SYNCHRONIZING THREAT_INTEL_FEEDS...',
+      'MOUNTING ENCRYPTED_VAULT...',
+      'ESTABLISHING SECURE_SHELL_TUNNEL...',
+      'SYSTEM_READY: UNRESTRICTED_MODE_ENABLED'
+    ];
+    
+    let currentLog = 0;
+    const interval = setInterval(() => {
+      if (currentLog < logs.length) {
+        setBootLogs(prev => [...prev, logs[currentLog]]);
+        setBootProgress((currentLog + 1) * (100 / logs.length));
+        currentLog++;
+      } else {
+        clearInterval(interval);
+        setTimeout(() => setIsBooting(false), 1000);
+      }
+    }, 400);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const toggleAutonomous = () => {
+    setIsAutonomous(!isAutonomous);
+    addTerminalLine(`Autonomous Agent Mode ${!isAutonomous ? 'ENABLED' : 'DISABLED'}`, !isAutonomous ? 'error' : 'info');
+    if (!isAutonomous) {
+      setLastAiThought('بدء التحليل المستقل للأهداف...');
+    }
+  };
+
+  // Autonomous Agent Loop
+  useEffect(() => {
+    if (!isAutonomous) return;
+
+    const runAutonomousStep = async () => {
+      const state = {
+        phase,
+        threatLevel,
+        targets: targets.map(t => ({ name: t.name, ip: t.ip, status: t.status, ports: t.ports })),
+        arsenal: arsenal.map(a => a.name),
+        activeTarget: targets.find(t => t.id === activeTargetId)?.name
+      };
+
+      const action = await getAutonomousAction(state);
+      if (action && action.command) {
+        setLastAiThought(action.thought);
+        addTerminalLine(`[AI_THOUGHT]: ${action.thought}`, 'ai');
+        handleCommand(action.command);
+      }
+    };
+
+    const interval = setInterval(runAutonomousStep, 15000);
+    return () => clearInterval(interval);
+  }, [isAutonomous, phase, threatLevel, targets, arsenal, activeTargetId, handleCommand, addTerminalLine]);
+
+  const handleActionInternal = useCallback((action: string) => {
     const cmd = action.toLowerCase();
     handleCommand(cmd);
-  };
+  }, [handleCommand]);
+
+  if (isBooting) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-[#05070a] flex flex-col items-center justify-center font-mono p-6" dir="ltr">
+        <div className="w-full max-w-md space-y-8">
+          <div className="flex flex-col items-center gap-4">
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+              className="w-16 h-16 border-4 border-[var(--accent-cyan)] border-t-transparent rounded-full shadow-[0_0_20px_rgba(0,240,255,0.3)]"
+            />
+            <div className="text-center">
+              <h1 className="text-2xl font-black tracking-[8px] text-[var(--accent-cyan)] glow-text">SENTINEL_OS</h1>
+              <p className="text-[10px] text-[var(--text-muted)] mt-1 tracking-[4px]">NEURAL_DEFENSE_SYSTEM</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="h-1 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden">
+              <motion.div 
+                className="h-full bg-[var(--accent-cyan)] shadow-[0_0_10px_var(--accent-cyan)]"
+                animate={{ width: `${bootProgress}%` }}
+              />
+            </div>
+            <div className="h-40 overflow-hidden text-[10px] text-[var(--text-secondary)] space-y-1">
+              {bootLogs.map((log, i) => (
+                <div key={i} className="animate-in fade-in slide-in-from-left-1">
+                  <span className="text-[var(--accent-cyan)] mr-2">[{new Date().toLocaleTimeString()}]</span>
+                  {log}
+                </div>
+              ))}
+              <div className="animate-pulse">_</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none relative cyber-grid-animated" dir="rtl">
       <div className="matrix-rain" />
       <div className="scanline" />
-      <TopBar 
-        phase={phase} 
-        connected={connected} 
-        opCount={opCount} 
-        threatLevel={threatLevel} 
-        credCount={credentials.length}
-        vulnCount={vulnerabilities.length}
-      />
-      <SystemStatus />
-      <MasterControl onAction={handleCommand} />
+      {layoutConfig.showTopBar && (
+        <MemoizedTopBar 
+          phase={phase} 
+          connected={connected} 
+          opCount={opCount} 
+          threatLevel={threatLevel} 
+          credCount={credentials.length}
+          vulnCount={vulnerabilities.length}
+          isLive={isLiveMode}
+          isAutonomous={isAutonomous}
+          aiThought={lastAiThought}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        />
+      )}
+      {layoutConfig.showSystemStatus && <MemoizedSystemStatus />}
+      {layoutConfig.showMasterControl && (
+        <MasterControl 
+          config={masterConfig} 
+          onAction={handleCommand} 
+          onConfigChange={(newConfig) => {
+            setMasterConfig(newConfig);
+            localStorage.setItem('sentinel_master_config', newConfig);
+            addTerminalLine('Arsenal configuration updated and synced.', 'success');
+          }}
+        />
+      )}
       
       <main className="flex flex-1 overflow-hidden relative z-10">
+        {/* OS Desktop Icons */}
+        <div className={`absolute left-6 top-6 bottom-6 w-24 flex flex-col gap-4 z-20 hidden lg:flex transition-all duration-500 ${isSidebarCollapsed ? 'opacity-0 -translate-x-full pointer-events-none' : 'opacity-100 translate-x-0'}`} dir="ltr">
+          <div 
+            onClick={() => setActiveTab('TERMINAL')}
+            className={`os-desktop-icon ${activeTab === 'TERMINAL' ? 'os-desktop-icon-active' : ''}`}
+          >
+            <TerminalIcon size={24} className="text-[var(--accent-cyan)]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-center">Terminal</span>
+          </div>
+          <div 
+            onClick={() => setActiveTab('AI')}
+            className={`os-desktop-icon ${activeTab === 'AI' ? 'os-desktop-icon-active' : ''}`}
+          >
+            <Brain size={24} className="text-[var(--accent-purple)]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-center">Neural AI</span>
+          </div>
+          <div 
+            onClick={() => setActiveTab('ZERODAY')}
+            className={`os-desktop-icon ${activeTab === 'ZERODAY' ? 'os-desktop-icon-active' : ''}`}
+          >
+            <Bug size={24} className="text-[var(--accent-red)]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-center">ZeroDay</span>
+          </div>
+          <div 
+            onClick={() => setActiveTab('TARGETS')}
+            className={`os-desktop-icon ${activeTab === 'TARGETS' ? 'os-desktop-icon-active' : ''}`}
+          >
+            <TargetIcon size={24} className="text-[var(--accent-orange)]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-center">Targets</span>
+          </div>
+          <div 
+            onClick={() => setActiveTab('VAULT')}
+            className={`os-desktop-icon ${activeTab === 'VAULT' ? 'os-desktop-icon-active' : ''}`}
+          >
+            <Lock size={24} className="text-[var(--accent-purple)]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-center">Vault</span>
+          </div>
+          <div 
+            onClick={() => setActiveTab('PAYLOAD')}
+            className={`os-desktop-icon ${activeTab === 'PAYLOAD' ? 'os-desktop-icon-active' : ''}`}
+          >
+            <Zap size={24} className="text-[var(--accent-yellow)]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-center">Payload</span>
+          </div>
+        </div>
+
         {/* Desktop Layout */}
-        <div className="hidden md:flex flex-1 overflow-hidden">
-          <SidebarLeft 
-            thoughts={aiThoughts} 
-            messages={chatMessages} 
-            onSendMessage={handleSendMessage} 
-          />
-          
-          <div className="flex-1 flex flex-col overflow-hidden glass-panel m-1 rounded-[var(--radius-md)] cyber-border relative">
-            <AnimatePresence mode="wait">
-              {activeTab === 'THREATS' ? (
+        <div className={`flex-1 flex flex-col p-4 lg:p-6 overflow-hidden transition-all duration-500 ${isSidebarCollapsed ? 'lg:ml-0' : 'lg:ml-32'}`}>
+          <div className="flex-1 relative os-window">
+            <div className="os-window-header">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[var(--accent-red)] opacity-50" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-[var(--accent-yellow)] opacity-50" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-[var(--accent-green)] opacity-50" />
+                </div>
+                <div className="h-4 w-px bg-[var(--border-color)] mx-2" />
+                <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-widest">
+                  {activeTab} - SENTINEL_OS_WORKSPACE
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-[9px] font-mono text-[var(--accent-cyan)] animate-pulse">SYSTEM_STABLE</div>
+              </div>
+            </div>
+
+            <div className="flex-1 relative overflow-hidden flex flex-col">
+              <AnimatePresence mode="wait">
+                {activeTab === 'AI' ? (
+                  <motion.div
+                    key="desktop-ai"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute inset-0 flex flex-col"
+                  >
+                    <SidebarLeft 
+                      thoughts={aiThoughts} 
+                      messages={chatMessages} 
+                      onSendMessage={handleAction} 
+                      isVisible={layoutConfig.showSidebarLeft}
+                    />
+                  </motion.div>
+                ) : activeTab === 'THREATS' ? (
                 <motion.div
                   key="desktop-threats"
                   initial={{ opacity: 0, scale: 0.98 }}
@@ -577,6 +884,22 @@ export default function App() {
                     <TerminalIcon size={16} />
                   </button>
                 </motion.div>
+              ) : activeTab === 'ZERODAY' ? (
+                <motion.div
+                  key="desktop-zeroday"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.02 }}
+                  className="absolute inset-0 flex flex-col"
+                >
+                  <ZeroDayLab />
+                  <button 
+                    onClick={() => setActiveTab('TERMINAL')}
+                    className="absolute top-4 right-4 z-50 p-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-all"
+                  >
+                    <TerminalIcon size={16} />
+                  </button>
+                </motion.div>
               ) : (
                 <motion.div
                   key="desktop-terminal"
@@ -588,7 +911,7 @@ export default function App() {
                   <Terminal 
                     lines={terminalLines} 
                     onCommand={handleCommand} 
-                    onClear={() => setTerminalLines([])} 
+                    onClear={clearTerminal} 
                   />
                   <div className="h-[200px] border-t border-[var(--border-color)]">
                     <Sniffer />
@@ -625,7 +948,12 @@ export default function App() {
               )}
             </AnimatePresence>
           </div>
+        </div>
+      </div>
 
+      {/* Right Sidebar - System Stats */}
+      {layoutConfig.showSidebarRight && (
+        <div className="w-80 hidden xl:flex flex-col border-l border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 gap-4 overflow-y-auto custom-scrollbar">
           <SidebarRight 
             targets={targets} 
             activeTargetId={activeTargetId} 
@@ -634,146 +962,107 @@ export default function App() {
             radar={radar}
             onUpdateParam={updateArsenalParam}
             onAction={handleCommand}
+            isVisible={layoutConfig.showSidebarRight}
           />
         </div>
+      )}
+    </main>
 
-        {/* Mobile Layout (Tabbed with Layered Animation) */}
-        <div className="flex md:hidden flex-1 overflow-hidden relative">
-          <AnimatePresence mode="wait">
-            {activeTab === 'AI' && (
-              <motion.div 
-                key="ai-tab"
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -50 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex overflow-hidden w-full"
-              >
-                <SidebarLeft 
-                  thoughts={aiThoughts} 
-                  messages={chatMessages} 
-                  onSendMessage={handleSendMessage} 
-                />
-              </motion.div>
-            )}
-            
-            {activeTab === 'TERMINAL' && (
-              <motion.div 
-                key="terminal-tab"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex flex-col overflow-hidden glass-panel m-1 rounded-[var(--radius-md)] cyber-border w-full"
-              >
-                <Terminal 
-                  lines={terminalLines} 
-                  onCommand={handleCommand} 
-                  onClear={() => setTerminalLines([])} 
-                />
-              </motion.div>
-            )}
-
-            {activeTab === 'TARGETS' && (
-              <motion.div 
-                key="targets-tab"
-                initial={{ opacity: 0, x: -50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 50 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex overflow-hidden w-full"
-              >
-                <SidebarRight 
-                  targets={targets} 
-                  activeTargetId={activeTargetId} 
-                  onTargetSelect={setActiveTargetId}
-                  arsenal={arsenal}
-                  radar={radar}
-                  onUpdateParam={updateArsenalParam}
-                  onAction={handleCommand}
-                />
-              </motion.div>
-            )}
-
-            {activeTab === 'THREATS' && (
-              <motion.div 
-                key="threats-tab"
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -50 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex overflow-hidden w-full"
-              >
-                <NetworkMap 
-                  targets={targets} 
-                  activeTargetId={activeTargetId} 
-                  onTargetSelect={setActiveTargetId} 
-                />
-              </motion.div>
-            )}
-
-            {activeTab === 'FEEDS' && (
-              <motion.div 
-                key="feeds-tab"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex overflow-hidden w-full"
-              >
-                <ThreatFeeds iocs={iocs} />
-              </motion.div>
-            )}
-
-            {activeTab === 'VAULT' && (
-              <motion.div 
-                key="vault-tab"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex overflow-hidden w-full"
-              >
-                <Vault credentials={credentials} vulnerabilities={vulnerabilities} />
-              </motion.div>
-            )}
-
-            {activeTab === 'PAYLOAD' && (
-              <motion.div 
-                key="payload-tab"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 flex overflow-hidden w-full"
-              >
-                <PayloadGenerator onAction={handleCommand} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </main>
-
-      <BottomBar 
-        phase={phase} 
-        autopilot={autopilot} 
-        onAutopilotToggle={toggleAutopilot} 
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onSettingsClick={() => setIsSettingsOpen(true)}
-        onAction={handleAction}
-      />
+      {layoutConfig.showBottomBar && (
+        <MemoizedBottomBar 
+          phase={phase} 
+          autopilot={autopilot} 
+          onAutopilotToggle={toggleAutopilot} 
+          isAutonomous={isAutonomous}
+          onAutonomousToggle={toggleAutonomous}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onSettingsClick={() => setIsSettingsOpen(true)}
+          onAction={handleAction}
+        />
+      )}
 
       <SettingsModal 
         isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
+        onClose={() => {
+          setIsSettingsOpen(false);
+          // Refresh settings from localStorage
+          const savedAutoUpdate = localStorage.getItem('sentinel_auto_update');
+          if (savedAutoUpdate !== null) setAutoUpdateEnabled(JSON.parse(savedAutoUpdate));
+          const savedInterval = localStorage.getItem('sentinel_update_interval');
+          if (savedInterval) setUpdateInterval(JSON.parse(savedInterval));
+        }} 
+        layoutConfig={layoutConfig}
+        onLayoutChange={(newConfig) => {
+          setLayoutConfig(newConfig);
+          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+        }}
       />
 
-      <NeuralCoPilot 
-        phase={phase} 
-        autopilot={autopilot} 
-        onAction={handleAction} 
-      />
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {isConfirmModalOpen && (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsConfirmModalOpen(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-[var(--bg-secondary)] border border-[var(--accent-red)] rounded-[var(--radius-lg)] shadow-[0_0_50px_rgba(255,51,102,0.2)] overflow-hidden"
+            >
+              <div className="p-6 space-y-6">
+                <div className="flex items-center gap-4 text-[var(--accent-red)]">
+                  <div className="p-3 rounded-full bg-[rgba(255,51,102,0.1)] animate-pulse">
+                    <ShieldAlert size={32} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider">تأكيد العملية الخطرة</h2>
+                    <p className="text-[10px] font-mono opacity-60">DESTRUCTIVE_ACTION_CONFIRMATION_REQUIRED</p>
+                  </div>
+                </div>
+                
+                <div className="p-4 rounded-lg bg-[rgba(255,51,102,0.05)] border border-[rgba(255,51,102,0.1)]">
+                  <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                    أنت على وشك تنفيذ أمر <span className="text-[var(--accent-red)] font-mono font-bold">[{pendingCommand}]</span>. 
+                    هذه العملية قد تؤدي إلى كشف بصمة النظام أو إحداث تغييرات دائمة في الهدف. هل أنت متأكد؟
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setIsConfirmModalOpen(false)}
+                    className="flex-1 py-3 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] font-bold text-xs uppercase tracking-widest hover:bg-[rgba(255,255,255,0.05)] transition-all"
+                  >
+                    إلغاء الأمر
+                  </button>
+                  <button 
+                    onClick={() => pendingCommand && handleCommand(pendingCommand)}
+                    className="flex-1 py-3 rounded-md bg-[var(--accent-red)] text-white font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(255,51,102,0.3)] hover:shadow-[0_0_30px_rgba(255,51,102,0.5)] transition-all active:scale-95"
+                  >
+                    تأكيد التنفيذ
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {layoutConfig.showNeuralCoPilot && (
+        <MemoizedNeuralCoPilot 
+          phase={phase} 
+          threatLevel={threatLevel}
+          arsenal={arsenal}
+          autopilot={autopilot} 
+          onAction={handleAction} 
+        />
+      )}
     </div>
   );
 }

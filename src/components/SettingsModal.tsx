@@ -1,41 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Settings, Shield, Bell, Monitor, Database, Lock, Cpu, Key, Eye, EyeOff, Globe, Plus, Trash2, RefreshCw, Zap } from 'lucide-react';
-import { ThreatFeed } from '../types';
+import { X, Settings, Shield, Bell, Monitor, Database, Lock, Cpu, Key, Eye, EyeOff, Globe, Plus, Trash2, RefreshCw, Zap, Layout, Brain } from 'lucide-react';
+import { ThreatFeed, LayoutConfig } from '../types';
+import { DEFAULT_FEEDS, DEFAULT_LAYOUT_CONFIG } from '../constants';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  layoutConfig: LayoutConfig;
+  onLayoutChange: (config: LayoutConfig) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, layoutConfig, onLayoutChange }) => {
+  const [shodanKey, setShodanKey] = useState('');
+  const [vtKey, setVtKey] = useState('');
+  const [aiKey, setAiKey] = useState('');
+  const [showShodanKey, setShowShodanKey] = useState(false);
+  const [showVtKey, setShowVtKey] = useState(false);
+  const [showAiKey, setShowAiKey] = useState(false);
   const [feeds, setFeeds] = useState<ThreatFeed[]>([]);
   const [newFeedUrl, setNewFeedUrl] = useState('');
   const [newFeedName, setNewFeedName] = useState('');
   const [isHackerMode, setIsHackerMode] = useState(true);
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
+  const [updateInterval, setUpdateInterval] = useState(60); // seconds
+  const [lastSyncTime, setLastSyncTime] = useState<string>(new Date().toLocaleTimeString());
+  const [localLayout, setLocalLayout] = useState<LayoutConfig>(layoutConfig);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem('sentinel_ai_api_key') || '';
-    setApiKey(savedKey);
+    setLocalLayout(layoutConfig);
+  }, [layoutConfig]);
+
+  useEffect(() => {
+    const savedShodan = localStorage.getItem('sentinel_shodan_key') || '';
+    setShodanKey(savedShodan);
+    const savedVt = localStorage.getItem('sentinel_vt_key') || '';
+    setVtKey(savedVt);
+    const savedAi = localStorage.getItem('GEMINI_API_KEY') || '';
+    setAiKey(savedAi);
     
     const savedFeeds = localStorage.getItem('sentinel_threat_feeds');
     if (savedFeeds) {
       setFeeds(JSON.parse(savedFeeds));
     } else {
-      // Default feeds
-      const defaults: ThreatFeed[] = [
-        { id: 'f1', name: 'AlienVault OTX', url: 'https://otx.alienvault.com/api/v1/pulses/subscribed', enabled: true },
-        { id: 'f2', name: 'MISP Open Source', url: 'https://misp-project.org/feeds/', enabled: false }
-      ];
-      setFeeds(defaults);
+      setFeeds(DEFAULT_FEEDS);
     }
+
+    const savedAutoUpdate = localStorage.getItem('sentinel_auto_update');
+    if (savedAutoUpdate !== null) setAutoUpdateEnabled(JSON.parse(savedAutoUpdate));
+
+    const savedInterval = localStorage.getItem('sentinel_update_interval');
+    if (savedInterval) setUpdateInterval(JSON.parse(savedInterval));
   }, [isOpen]);
 
   const handleSave = () => {
-    localStorage.setItem('sentinel_ai_api_key', apiKey);
+    localStorage.setItem('sentinel_shodan_key', shodanKey);
+    localStorage.setItem('sentinel_vt_key', vtKey);
+    localStorage.setItem('GEMINI_API_KEY', aiKey);
     localStorage.setItem('sentinel_threat_feeds', JSON.stringify(feeds));
+    localStorage.setItem('sentinel_auto_update', JSON.stringify(autoUpdateEnabled));
+    localStorage.setItem('sentinel_update_interval', JSON.stringify(updateInterval));
+    onLayoutChange(localLayout);
     onClose();
   };
 
@@ -106,32 +131,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <h3 className="text-xs font-black uppercase tracking-widest">بروتوكولات الأمان والذكاء الاصطناعي</h3>
                 </div>
                 
-                {/* AI API Key Input */}
-                <div className="p-4 rounded-lg bg-[rgba(0,240,255,0.03)] border border-[var(--border-color)] space-y-3">
+                {/* External API Keys */}
+                <div className="p-4 rounded-lg bg-[rgba(0,240,255,0.03)] border border-[var(--border-color)] space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Key size={14} className="text-[var(--accent-cyan)]" />
-                      <span className="text-xs font-bold text-[var(--text-primary)]">Gemini API Key</span>
+                      <Globe size={14} className="text-[var(--accent-cyan)]" />
+                      <span className="text-xs font-bold text-[var(--text-primary)]">مفاتيح الوصول الخارجية (API Keys)</span>
                     </div>
-                    <div className="text-[9px] text-[var(--text-muted)] font-mono">REQUIRED_FOR_NEURAL_LINK</div>
+                    <div className="text-[9px] text-[var(--text-muted)] font-mono">EXTERNAL_INTEGRATIONS</div>
                   </div>
-                  <div className="relative">
-                    <input 
-                      type={showKey ? "text" : "password"}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="أدخل مفتاح API الخاص بك هنا..."
-                      className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-4 py-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-[var(--accent-cyan)] outline-none transition-all pr-10"
-                    />
-                    <button 
-                      onClick={() => setShowKey(!showKey)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-colors"
-                    >
-                      {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
+                  
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold uppercase text-[var(--text-muted)]">Shodan API Key</label>
+                      <div className="relative">
+                        <input 
+                          type={showShodanKey ? "text" : "password"}
+                          value={shodanKey}
+                          onChange={(e) => setShodanKey(e.target.value)}
+                          placeholder="أدخل مفتاح Shodan..."
+                          className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-4 py-2 text-xs text-[var(--text-primary)] font-mono focus:border-[var(--accent-cyan)] outline-none transition-all pr-10"
+                        />
+                        <button 
+                          onClick={() => setShowShodanKey(!showShodanKey)}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-colors"
+                        >
+                          {showShodanKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold uppercase text-[var(--text-muted)]">VirusTotal API Key</label>
+                      <div className="relative">
+                        <input 
+                          type={showVtKey ? "text" : "password"}
+                          value={vtKey}
+                          onChange={(e) => setVtKey(e.target.value)}
+                          placeholder="أدخل مفتاح VirusTotal..."
+                          className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-4 py-2 text-xs text-[var(--text-primary)] font-mono focus:border-[var(--accent-cyan)] outline-none transition-all pr-10"
+                        />
+                        <button 
+                          onClick={() => setShowVtKey(!showVtKey)}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-colors"
+                        >
+                          {showVtKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold uppercase text-[var(--text-muted)]">Gemini AI API Key</label>
+                      <div className="relative">
+                        <input 
+                          type={showAiKey ? "text" : "password"}
+                          value={aiKey}
+                          onChange={(e) => setAiKey(e.target.value)}
+                          placeholder="أدخل مفتاح Gemini API..."
+                          className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-4 py-2 text-xs text-[var(--text-primary)] font-mono focus:border-[var(--accent-cyan)] outline-none transition-all pr-10"
+                        />
+                        <button 
+                          onClick={() => setShowAiKey(!showAiKey)}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-colors"
+                        >
+                          {showAiKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <p className="text-[9px] text-[var(--text-muted)] leading-relaxed">
-                    يتم استخدام هذا المفتاح لتشغيل العمليات التحليلية المتقدمة وقناة التواصل مع Sentinel AI. يتم تخزينه محلياً فقط.
+                    تُستخدم هذه المفاتيح لربط النظام بقواعد بيانات التهديدات العالمية. يتم تخزينها محلياً في متصفحك فقط.
                   </p>
                 </div>
 
@@ -181,7 +250,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       <Zap size={16} className="text-[var(--accent-purple)]" />
                       <div>
                         <div className="text-xs font-bold text-[var(--text-primary)]">وضع المحترف (Pro Hacker Mode)</div>
-                        <div className="text-[10px] text-[var(--text-muted)]">تفعيل المؤثرات البصرية والتحليلية المتقدمة</div>
+                        <div className="text-[10px] text-[var(--text-muted)] t-muted">تفعيل المؤثرات البصرية والتحليلية المتقدمة</div>
                       </div>
                     </div>
                     <div 
@@ -194,6 +263,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
               </div>
 
+              {/* Section: Layout Configuration */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[var(--accent-cyan)]">
+                  <Layout size={16} />
+                  <h3 className="text-xs font-black uppercase tracking-widest">تكوين المخطط والوحدات</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { id: 'showSidebarLeft', name: 'القائمة اليسرى (AI)', icon: Brain },
+                    { id: 'showSidebarRight', name: 'القائمة اليمنى (Stats)', icon: Database },
+                    { id: 'showTopBar', name: 'الشريط العلوي', icon: Monitor },
+                    { id: 'showBottomBar', name: 'الشريط السفلي', icon: Layout },
+                    { id: 'showSystemStatus', name: 'حالة النظام', icon: Cpu },
+                    { id: 'showNeuralCoPilot', name: 'المساعد العصبي', icon: Zap },
+                    { id: 'showMasterControl', name: 'لوحة التحكم الرئيسية', icon: Settings },
+                  ].map((item) => (
+                    <div 
+                      key={item.id}
+                      className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] flex items-center justify-between group hover:border-[var(--accent-cyan)] transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon size={14} className="text-[var(--text-muted)] group-hover:text-[var(--accent-cyan)]" />
+                        <span className="text-[11px] font-bold text-[var(--text-secondary)]">{item.name}</span>
+                      </div>
+                      <div 
+                        onClick={() => setLocalLayout({ ...localLayout, [item.id]: !localLayout[item.id as keyof LayoutConfig] })}
+                        className={`w-8 h-4 rounded-full relative cursor-pointer transition-all ${localLayout[item.id as keyof LayoutConfig] ? 'bg-[var(--accent-cyan)]' : 'bg-[var(--bg-input)] border border-[var(--border-color)]'}`}
+                      >
+                        <div className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all ${localLayout[item.id as keyof LayoutConfig] ? 'left-4.5' : 'left-0.5'}`} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Section: Threat Intelligence Feeds */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[var(--accent-red)]">
@@ -202,6 +307,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
                 
                 <div className="space-y-4">
+                  {/* Auto-update settings */}
+                  <div className="p-4 rounded-lg bg-[rgba(255,51,102,0.05)] border border-[rgba(255,51,102,0.1)] space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <RefreshCw size={16} className="text-[var(--accent-red)]" />
+                        <div>
+                          <div className="text-xs font-bold text-[var(--text-primary)]">تحديث تلقائي للاستخبارات</div>
+                          <div className="text-[10px] text-[var(--text-muted)]">مزامنة المصادر بشكل دوري</div>
+                        </div>
+                      </div>
+                      <div 
+                        onClick={() => setAutoUpdateEnabled(!autoUpdateEnabled)}
+                        className={`w-10 h-5 rounded-full relative cursor-pointer transition-all ${autoUpdateEnabled ? 'bg-[var(--accent-red)]' : 'bg-[var(--bg-input)] border border-[var(--border-color)]'}`}
+                      >
+                        <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all ${autoUpdateEnabled ? 'left-5.5' : 'left-0.5'}`} />
+                      </div>
+                    </div>
+
+                    {autoUpdateEnabled && (
+                      <div className="space-y-2 pt-2 border-t border-[rgba(255,51,102,0.1)]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-[var(--text-secondary)]">فترة التحديث (ثواني)</span>
+                          <span className="text-[10px] font-mono text-[var(--accent-red)]">{updateInterval}s</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="10" 
+                          max="3600" 
+                          step="10"
+                          value={updateInterval}
+                          onChange={(e) => setUpdateInterval(parseInt(e.target.value))}
+                          className="w-full accent-[var(--accent-red)]" 
+                        />
+                        <div className="text-[8px] text-[var(--text-muted)] font-mono uppercase">
+                          آخر مزامنة ناجحة: {lastSyncTime}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Add New Feed */}
                   <div className="p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

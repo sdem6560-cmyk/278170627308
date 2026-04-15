@@ -27,6 +27,17 @@ export interface Target {
   ip: string;
   status: 'online' | 'offline' | 'scanning';
   os?: string;
+  ports?: number[];
+  services?: string[];
+  vulnerabilities?: string[];
+}
+
+export interface Session {
+  id: string;
+  targetId: string;
+  type: 'meterpreter' | 'shell' | 'ssh';
+  status: 'active' | 'closed';
+  openedAt: string;
 }
 
 export interface ArsenalParam {
@@ -84,4 +95,14 @@ export interface Vulnerability {
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
   status: 'detected' | 'exploited';
+}
+
+export interface LayoutConfig {
+  showSidebarLeft: boolean;
+  showSidebarRight: boolean;
+  showTopBar: boolean;
+  showBottomBar: boolean;
+  showSystemStatus: boolean;
+  showNeuralCoPilot: boolean;
+  showMasterControl: boolean;
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Zap, Terminal, Shield, Download, Cpu, Code, Globe, Server } from 'lucide-react';
+import { Zap, Terminal, Shield, Download, Cpu, Code, Globe, Server, Copy, Check } from 'lucide-react';
 
 interface PayloadGeneratorProps {
   onAction?: (action: string) => void;
@@ -14,6 +14,7 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
   const [lport, setLport] = useState('4444');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPayload, setGeneratedPayload] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleGenerate = () => {
     setIsGenerating(true);
@@ -24,6 +25,23 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
       setGeneratedPayload(payload);
       setIsGenerating(false);
     }, 2000);
+  };
+
+  const handleCopy = () => {
+    if (!generatedPayload) return;
+    
+    const instructions = [
+      "1. قم بتشغيل مستمع (Listener) على جهازك باستخدام Metasploit: use exploit/multi/handler",
+      "2. ارفع الملف المولد إلى الهدف باستخدام أي وسيلة انتقال (FTP, HTTP, etc.)",
+      "3. امنح صلاحيات التنفيذ للملف: chmod +x payload.elf"
+    ].join('\n');
+    
+    const textToCopy = `Payload:\n${generatedPayload}\n\nInstructions:\n${instructions}`;
+    
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   return (
@@ -123,6 +141,15 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
               <Code size={14} className="text-[var(--text-secondary)]" />
               <span className="text-xs font-black uppercase tracking-wider">كود الحمولة المولد (Generated Output)</span>
             </div>
+            {generatedPayload && (
+              <button 
+                onClick={handleCopy}
+                className="flex items-center gap-2 px-3 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] hover:border-[var(--accent-cyan)] transition-all"
+              >
+                {copied ? <Check size={12} className="text-[var(--accent-green)]" /> : <Copy size={12} />}
+                {copied ? 'تم النسخ' : 'نسخ الكل'}
+              </button>
+            )}
           </div>
           
           <div className="flex-1 p-6 font-mono text-sm overflow-y-auto custom-scrollbar relative">

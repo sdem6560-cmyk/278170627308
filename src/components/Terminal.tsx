@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as TerminalIcon, Maximize2, X, Trash2 } from 'lucide-react';
 import { TerminalLine } from '../types';
+import { COMMANDS } from '../constants';
 
 interface TerminalProps {
   lines: TerminalLine[];
@@ -9,7 +10,14 @@ interface TerminalProps {
 }
 
 export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear }) => {
-  const [inputValue, setInputValue] = React.useState('');
+  const [inputValue, setInputValue] = useState('');
+  const [suggestion, setSuggestion] = useState('');
+  const [tabMatches, setTabMatches] = useState<string[]>([]);
+  const [tabIndex, setTabIndex] = useState(-1);
+  const [originalPrefix, setOriginalPrefix] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isValid, setIsValid] = useState(true);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -18,16 +26,74 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
     }
   }, [lines]);
 
+  useEffect(() => {
+    const trimmedInput = inputValue.trim();
+    if (trimmedInput && tabIndex === -1) {
+      const firstWord = trimmedInput.split(' ')[0].toLowerCase();
+      const matches = COMMANDS.filter(cmd => cmd.startsWith(firstWord));
+      setIsValid(matches.length > 0);
+      setTabMatches(matches);
+
+      if (matches.length > 0) {
+        const match = matches[0];
+        if (match && match.startsWith(inputValue.toLowerCase()) && match !== inputValue.toLowerCase()) {
+          setSuggestion(match.slice(inputValue.length));
+        } else {
+          setSuggestion('');
+        }
+      } else {
+        setSuggestion('');
+      }
+    } else if (!trimmedInput) {
+      setSuggestion('');
+      setIsValid(true);
+      setTabMatches([]);
+      setTabIndex(-1);
+      setOriginalPrefix('');
+    }
+  }, [inputValue, tabIndex]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && inputValue.trim()) {
       onCommand(inputValue);
+      setHistory(prev => [inputValue, ...prev].slice(0, 50));
+      setHistoryIndex(-1);
       setInputValue('');
-      
-      // Visual feedback
+      setSuggestion('');
+      setTabIndex(-1);
+      setOriginalPrefix('');
       const terminal = outputRef.current;
       if (terminal) {
         terminal.classList.add('terminal-pulse');
         setTimeout(() => terminal.classList.remove('terminal-pulse'), 200);
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (tabMatches.length > 0) {
+        const nextIndex = (tabIndex + 1) % tabMatches.length;
+        if (tabIndex === -1) {
+          setOriginalPrefix(inputValue);
+        }
+        setTabIndex(nextIndex);
+        setInputValue(tabMatches[nextIndex]);
+        setSuggestion('');
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (historyIndex < history.length - 1) {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setInputValue(history[newIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex > 0) {
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        setInputValue(history[newIndex]);
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1);
+        setInputValue('');
       }
     }
   };
@@ -109,19 +175,46 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
             </div>
           </div>
         ))}
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex items-center gap-2 mt-2 relative">
           <span className="text-[var(--accent-green)] font-bold">root@sentinel</span>
           <span className="text-[var(--text-primary)]">:</span>
           <span className="text-[var(--accent-blue)]">~</span>
           <span className="text-[var(--text-primary)]">#</span>
-          <input 
-            type="text"
-            autoFocus
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent border-none text-[var(--text-primary)] font-mono text-sm outline-none"
-          />
+          <div className="flex-1 relative">
+            <input 
+              type="text"
+              autoFocus
+              value={inputValue}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                setTabIndex(-1);
+                setOriginalPrefix('');
+              }}
+              onKeyDown={handleKeyDown}
+              className={`w-full bg-transparent border-none font-mono text-sm outline-none relative z-10 transition-colors ${isValid ? 'text-[var(--text-primary)]' : 'text-[var(--accent-red)]'}`}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            {suggestion && (
+              <div className="absolute left-0 top-0 text-[var(--text-muted)] opacity-50 font-mono text-sm pointer-events-none z-0">
+                <span className="invisible">{inputValue}</span>
+                {suggestion}
+              </div>
+            )}
+            {tabMatches.length > 1 && (
+              <div className="absolute left-0 -top-8 flex gap-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] px-2 py-1 rounded-md text-[10px] z-50 animate-in fade-in slide-in-from-bottom-2">
+                <span className="text-[var(--accent-cyan)] font-bold uppercase tracking-tighter opacity-50">Suggestions:</span>
+                {tabMatches.map((match, i) => (
+                  <span 
+                    key={match} 
+                    className={`${i === tabIndex ? 'text-[var(--accent-cyan)] font-bold underline' : 'text-[var(--text-muted)]'}`}
+                  >
+                    {match}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

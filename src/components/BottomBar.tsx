@@ -6,6 +6,8 @@ interface BottomBarProps {
   phase: Phase;
   autopilot: boolean;
   onAutopilotToggle: () => void;
+  isAutonomous?: boolean;
+  onAutonomousToggle?: () => void;
   activeTab?: 'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD';
   onTabChange?: (tab: 'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD') => void;
   onSettingsClick?: () => void;
@@ -16,6 +18,8 @@ export const BottomBar: React.FC<BottomBarProps> = ({
   phase, 
   autopilot, 
   onAutopilotToggle,
+  isAutonomous,
+  onAutonomousToggle,
   activeTab,
   onTabChange,
   onSettingsClick,
@@ -113,6 +117,21 @@ export const BottomBar: React.FC<BottomBarProps> = ({
             <span className="hidden xs:inline">الطيار الآلي</span>
             <div className={`w-7 md:w-8 h-3.5 md:h-4 rounded-full bg-[var(--bg-input)] relative transition-all duration-300 ${autopilot ? 'bg-[rgba(0,255,157,0.2)]' : ''}`}>
               <div className={`w-2.5 md:w-3 h-2.5 md:h-3 rounded-full absolute top-0.5 transition-all duration-300 ${autopilot ? 'left-4 md:left-4.5 bg-[var(--accent-green)]' : 'left-0.5 bg-[var(--text-muted)]'}`} />
+            </div>
+          </button>
+
+          <button 
+            onClick={onAutonomousToggle}
+            className={`flex items-center gap-3 px-3 md:px-4 py-1.5 rounded-full text-[9px] md:text-[10px] font-bold cursor-pointer transition-all duration-300 border font-mono shadow-sm ${
+              isAutonomous 
+                ? 'bg-[rgba(170,85,255,0.1)] border-[var(--accent-purple)] text-[var(--accent-purple)] shadow-[0_0_10px_rgba(170,85,255,0.2)]' 
+                : 'bg-[var(--bg-tertiary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--text-muted)]'
+            }`}
+          >
+            <Brain size={12} className={isAutonomous ? 'animate-pulse' : ''} />
+            <span className="hidden xs:inline">الوكيل المستقل</span>
+            <div className={`w-7 md:w-8 h-3.5 md:h-4 rounded-full bg-[var(--bg-input)] relative transition-all duration-300 ${isAutonomous ? 'bg-[rgba(170,85,255,0.2)]' : ''}`}>
+              <div className={`w-2.5 md:w-3 h-2.5 md:h-3 rounded-full absolute top-0.5 transition-all duration-300 ${isAutonomous ? 'left-4 md:left-4.5 bg-[var(--accent-purple)]' : 'left-0.5 bg-[var(--text-muted)]'}`} />
             </div>
           </button>
         </div>

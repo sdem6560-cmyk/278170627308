@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Zap, ShieldAlert, Settings, Target as TargetIcon, Radio, ChevronLeft, SlidersHorizontal, Filter, Layers } from 'lucide-react';
+import { Search, Zap, ShieldAlert, Settings, Target as TargetIcon, Radio, ChevronLeft, SlidersHorizontal, Filter, Layers, Brain, Sparkles, AlertTriangle } from 'lucide-react';
 import { Target, ArsenalItem, RadarEvent } from '../types';
+import { getExploitRecommendation } from '../services/geminiService';
 
 interface SidebarRightProps {
   targets: Target[];
@@ -25,6 +26,29 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
 }) => {
   const [tuningItemId, setTuningItemId] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'none' | 'os' | 'status'>('none');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [recommendation, setRecommendation] = useState<{
+    recommendation: string;
+    exploitId: string;
+    confidence: number;
+    riskLevel: string;
+  } | null>(null);
+
+  const activeTarget = useMemo(() => targets.find(t => t.id === activeTargetId), [targets, activeTargetId]);
+
+  const handleAnalyze = async () => {
+    if (!activeTarget) return;
+    setIsAnalyzing(true);
+    setRecommendation(null);
+    try {
+      const result = await getExploitRecommendation(activeTarget, arsenal);
+      setRecommendation(result);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   if (!isVisible) return null;
 
@@ -130,7 +154,17 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
             )}
           </div>
 
-          <div className="p-4 border-t border-[var(--border-color)] bg-[rgba(26,34,52,0.5)]">
+          <div className="p-4 border-t border-[var(--border-color)] bg-[rgba(26,34,52,0.5)] space-y-2">
+            <button 
+              onClick={() => {
+                onAction?.(tuningItem.type === 'scan' ? 'scan' : tuningItem.type === 'exploit' ? 'exploit' : tuningItem.name.toLowerCase());
+                setTuningItemId(null);
+              }}
+              className="w-full py-2.5 bg-[var(--accent-orange)] text-[var(--bg-primary)] rounded-md font-bold text-[10px] uppercase tracking-[2px] hover:shadow-[0_0_15px_rgba(255,136,0,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Zap size={14} />
+              تنفيذ الآن (Execute)
+            </button>
             <button 
               onClick={() => setTuningItemId(null)}
               className="w-full py-2.5 bg-[var(--accent-cyan)] text-[var(--bg-primary)] rounded-md font-bold text-[10px] uppercase tracking-[2px] hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all active:scale-95"
@@ -206,13 +240,63 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
                         </div>
                         <div className="hidden md:block text-[10px] text-[var(--text-muted)] font-medium truncate">{target.ip} {target.os && `| ${target.os}`}</div>
                         <div className="md:hidden text-[10px] text-[var(--text-muted)] font-mono">{target.ip}</div>
-                        {activeTargetId === target.id && target.ports && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {target.ports.map((port, idx) => (
-                              <span key={port} className="text-[8px] font-mono px-1.5 py-0.5 bg-[rgba(0,240,255,0.1)] text-[var(--accent-cyan)] rounded border border-[rgba(0,240,255,0.2)]" title={target.services?.[idx]}>
-                                {port}
-                              </span>
-                            ))}
+                        {activeTargetId === target.id && (
+                          <div className="mt-3 space-y-3">
+                            {target.ports && (
+                              <div className="flex flex-wrap gap-1">
+                                {target.ports.map((port, idx) => (
+                                  <span key={port} className="text-[8px] font-mono px-1.5 py-0.5 bg-[rgba(0,240,255,0.1)] text-[var(--accent-cyan)] rounded border border-[rgba(0,240,255,0.2)]" title={target.services?.[idx]}>
+                                    {port}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAnalyze();
+                              }}
+                              disabled={isAnalyzing}
+                              className="w-full py-1.5 bg-[rgba(170,85,255,0.1)] border border-[rgba(170,85,255,0.2)] text-[var(--accent-purple)] rounded text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[var(--accent-purple)] hover:text-white transition-all disabled:opacity-50"
+                            >
+                              {isAnalyzing ? (
+                                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Brain size={12} />
+                              )}
+                              {isAnalyzing ? 'جاري التحليل...' : 'تحليل الذكاء الاصطناعي'}
+                            </button>
+
+                            {recommendation && activeTargetId === target.id && (
+                              <div className="p-2.5 rounded bg-[rgba(170,85,255,0.05)] border border-[rgba(170,85,255,0.2)] space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 text-[var(--accent-purple)]">
+                                    <Sparkles size={10} />
+                                    <span className="text-[9px] font-black uppercase">توصية النظام</span>
+                                  </div>
+                                  <div className={`text-[8px] px-1.5 py-0.5 rounded font-mono uppercase ${
+                                    recommendation.riskLevel === 'low' ? 'bg-green-500/10 text-green-500' :
+                                    recommendation.riskLevel === 'medium' ? 'bg-yellow-500/10 text-yellow-500' :
+                                    'bg-red-500/10 text-red-500'
+                                  }`}>
+                                    RISK: {recommendation.riskLevel}
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed italic">
+                                  "{recommendation.recommendation}"
+                                </p>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAction?.(recommendation.exploitId);
+                                  }}
+                                  className="w-full py-1 bg-[var(--accent-purple)] text-white rounded text-[8px] font-bold uppercase tracking-tighter hover:brightness-110 transition-all"
+                                >
+                                  تنفيذ الاستغلال المقترح
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

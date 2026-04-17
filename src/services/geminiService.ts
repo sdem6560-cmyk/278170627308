@@ -151,3 +151,33 @@ export async function getSystemThoughts(phase?: string, threatLevel?: number, ar
     return shuffled.slice(0, 3).map(t => ({ ...t, action: 'scan' }));
   }
 }
+
+export async function getExploitRecommendation(target: any, arsenal: ArsenalItem[]) {
+  if (checkCooldown()) return null;
+
+  try {
+    const ai = getAIInstance();
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: `Target Data: ${JSON.stringify(target)}
+      Available Arsenal: ${JSON.stringify(arsenal)}
+      
+      Analyze the target's OS, ports, and vulnerabilities. Recommend the best exploit from the arsenal.
+      Return a JSON object with:
+      {
+        "recommendation": "Technical reasoning in Arabic",
+        "exploitId": "The ID of the recommended arsenal item",
+        "confidence": 0.95,
+        "riskLevel": "low/medium/high"
+      }`,
+      config: {
+        systemInstruction: "You are the Tactical Offensive Specialist of Sentinel OS. Your goal is to select the most effective exploit for a given target based on technical data. Be precise and technical.",
+        responseMimeType: "application/json",
+      },
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error: any) {
+    console.error("Exploit Recommendation Error:", error);
+    return null;
+  }
+}

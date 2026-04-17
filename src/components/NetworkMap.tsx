@@ -73,11 +73,34 @@ export const NetworkMap: React.FC<NetworkMapProps> = ({ targets, activeTargetId,
       .selectAll("line")
       .data(links)
       .join("line")
-      .attr("stroke", "var(--accent-cyan)")
-      .attr("stroke-opacity", 0.3)
-      .attr("stroke-width", 1)
-      .attr("stroke-dasharray", "5,5")
-      .attr("class", "network-link");
+      .attr("stroke", d => {
+        if (activeTargetId === d.target) return "var(--accent-red)";
+        return "var(--accent-cyan)";
+      })
+      .attr("stroke-opacity", d => activeTargetId === d.target ? 0.8 : 0.3)
+      .attr("stroke-width", d => activeTargetId === d.target ? 2 : 1)
+      .attr("stroke-dasharray", d => activeTargetId === d.target ? "none" : "5,5")
+      .attr("class", d => activeTargetId === d.target ? "network-link attack-vector" : "network-link");
+
+    // Add attack animation for active link
+    if (activeTargetId) {
+      const activeLink = links.find(l => l.target === activeTargetId || (l.target as any).id === activeTargetId);
+      if (activeLink) {
+        svg.append("circle")
+          .attr("r", 3)
+          .attr("fill", "var(--accent-red)")
+          .attr("filter", "url(#glow)")
+          .attr("class", "attack-pulse")
+          .append("animateMotion")
+          .attr("dur", "1.5s")
+          .attr("repeatCount", "indefinite")
+          .attr("path", () => {
+            const s = nodes.find(n => n.id === 'sentinel-core')!;
+            const t = nodes.find(n => n.id === activeTargetId)!;
+            return `M${s.x},${s.y} L${t.x},${t.y}`;
+          });
+      }
+    }
 
     // Draw nodes
     const node = svg.append("g")
@@ -138,6 +161,15 @@ export const NetworkMap: React.FC<NetworkMapProps> = ({ targets, activeTargetId,
         .attr("y1", d => (d.source as any).y)
         .attr("x2", d => (d.target as any).x)
         .attr("y2", d => (d.target as any).y);
+
+      // Update attack pulse path
+      svg.selectAll(".attack-pulse animateMotion")
+        .attr("path", () => {
+          const s = nodes.find(n => n.id === 'sentinel-core')!;
+          const t = nodes.find(n => n.id === activeTargetId)!;
+          if (!s || !t || s.x === undefined || t.x === undefined) return "";
+          return `M${s.x},${s.y} L${t.x},${t.y}`;
+        });
 
       node
         .attr("transform", d => `translate(${d.x},${d.y})`);
@@ -211,6 +243,14 @@ export const NetworkMap: React.FC<NetworkMapProps> = ({ targets, activeTargetId,
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[var(--accent-orange)]" />
             <span className="text-[9px] font-mono text-[var(--text-secondary)]">TARGET_SCANNING</span>
+          </div>
+          <div className="flex items-center gap-2 pt-2 border-t border-[var(--border-color)]">
+            <div className="w-3 h-0.5 bg-[var(--accent-red)]" />
+            <span className="text-[9px] font-mono text-[var(--accent-red)] font-bold uppercase">ATTACK_VECTOR</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-red)] animate-pulse" />
+            <span className="text-[9px] font-mono text-[var(--text-muted)]">EXPLOIT_PAYLOAD</span>
           </div>
         </div>
       </div>

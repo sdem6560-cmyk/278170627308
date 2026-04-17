@@ -97,6 +97,15 @@ export interface Vulnerability {
   status: 'detected' | 'exploited';
 }
 
+export interface DesktopIcon {
+  id: string;
+  name: string;
+  iconName: string; // From lucide-react
+  color: string;
+  action: 'TERMINAL' | 'AI' | 'ZERODAY' | 'TARGETS' | 'VAULT' | 'PAYLOAD' | 'FILES' | 'PROCESSES' | 'DESKTOP';
+  isVisible: boolean;
+}
+
 export interface LayoutConfig {
   showSidebarLeft: boolean;
   showSidebarRight: boolean;
@@ -105,4 +114,15 @@ export interface LayoutConfig {
   showSystemStatus: boolean;
   showNeuralCoPilot: boolean;
   showMasterControl: boolean;
+  stealthMode: boolean;
+  desktopIcons: DesktopIcon[];
+  shortcuts: {
+    openPayload: string;
+    switchTerminal: string;
+    switchAI: string;
+    switchTargets: string;
+    executeCommand: string;
+    toggleSidebarLeft: string;
+    toggleSidebarRight: string;
+  };
 }

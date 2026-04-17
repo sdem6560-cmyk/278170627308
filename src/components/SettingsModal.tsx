@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Settings, Shield, Bell, Monitor, Database, Lock, Cpu, Key, Eye, EyeOff, Globe, Plus, Trash2, RefreshCw, Zap, Layout, Brain } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+import { X, Settings, Shield, Bell, Monitor, Database, Lock, Cpu, Key, Eye, EyeOff, Globe, Plus, Trash2, RefreshCw, Zap, Layout, Brain, Keyboard } from 'lucide-react';
 import { ThreatFeed, LayoutConfig } from '../types';
 import { DEFAULT_FEEDS, DEFAULT_LAYOUT_CONFIG } from '../constants';
 
@@ -216,11 +217,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                   </div>
                   <div className="p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-bold text-[var(--text-primary)]">وضع التخفي</div>
-                      <div className="text-[10px] text-[var(--text-muted)]">إخفاء بصمة النظام أثناء العمليات</div>
+                      <div className="text-xs font-bold text-[var(--text-primary)]">وضع التخفي (Stealth Mode)</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">إخفاء بصمة النظام وتغيير المظهر للتمويه</div>
                     </div>
-                    <div className="w-10 h-5 rounded-full bg-[var(--bg-input)] border border-[var(--border-color)] relative cursor-pointer">
-                      <div className="w-4 h-4 rounded-full bg-[var(--text-muted)] absolute top-0.5 left-0.5" />
+                    <div 
+                      onClick={() => setLocalLayout({ ...localLayout, stealthMode: !localLayout.stealthMode })}
+                      className={`w-10 h-5 rounded-full relative cursor-pointer transition-all ${localLayout.stealthMode ? 'bg-[var(--accent-cyan)]' : 'bg-[var(--bg-input)] border border-[var(--border-color)]'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all ${localLayout.stealthMode ? 'left-5.5' : 'left-0.5'}`} />
                     </div>
                   </div>
                 </div>
@@ -297,6 +301,110 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Section: Desktop Icon Customization */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[var(--accent-purple)]">
+                  <Monitor size={16} />
+                  <h3 className="text-xs font-black uppercase tracking-widest">تخصيص أيقونات سطح المكتب</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 rounded-lg bg-[rgba(170,85,255,0.03)] border border-[var(--border-color)]">
+                  {localLayout.desktopIcons?.map((icon, index) => (
+                    <div key={icon.id} className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded bg-[rgba(255,255,255,0.05)]`} style={{ color: icon.color }}>
+                            {React.createElement((LucideIcons as any)[icon.iconName] || LucideIcons.HelpCircle, { size: 14 })}
+                          </div>
+                          <span className="text-[11px] font-bold text-[var(--text-primary)]">{icon.name}</span>
+                        </div>
+                        <div 
+                          onClick={() => {
+                            const newIcons = [...localLayout.desktopIcons];
+                            newIcons[index] = { ...newIcons[index], isVisible: !newIcons[index].isVisible };
+                            setLocalLayout({ ...localLayout, desktopIcons: newIcons });
+                          }}
+                          className={`w-8 h-4 rounded-full relative cursor-pointer transition-all ${icon.isVisible ? 'bg-[var(--accent-purple)]' : 'bg-[var(--bg-input)] border border-[var(--border-color)]'}`}
+                        >
+                          <div className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all ${icon.isVisible ? 'left-4.5' : 'left-0.5'}`} />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[8px] uppercase text-[var(--text-muted)]">الاسم</label>
+                          <input 
+                            type="text"
+                            value={icon.name}
+                            onChange={(e) => {
+                              const newIcons = [...localLayout.desktopIcons];
+                              newIcons[index] = { ...newIcons[index], name: e.target.value };
+                              setLocalLayout({ ...localLayout, desktopIcons: newIcons });
+                            }}
+                            className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded px-2 py-1 text-[10px] text-[var(--text-primary)] outline-none focus:border-[var(--accent-purple)]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] uppercase text-[var(--text-muted)]">الأيقونة</label>
+                          <input 
+                            type="text"
+                            value={icon.iconName}
+                            onChange={(e) => {
+                              const newIcons = [...localLayout.desktopIcons];
+                              newIcons[index] = { ...newIcons[index], iconName: e.target.value };
+                              setLocalLayout({ ...localLayout, desktopIcons: newIcons });
+                            }}
+                            className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded px-2 py-1 text-[10px] text-[var(--text-primary)] outline-none focus:border-[var(--accent-purple)]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[8px] text-[var(--text-muted)] leading-relaxed italic">
+                  * يمكنك تغيير أسماء الأيقونات ونوعها (باستخدام أسماء Lucide Icons) وإخفائها من سطح المكتب.
+                </p>
+              </div>
+
+              {/* Section: Keyboard Shortcuts */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[var(--accent-orange)]">
+                  <Keyboard size={16} />
+                  <h3 className="text-xs font-black uppercase tracking-widest">اختصارات لوحة المفاتيح</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-[rgba(255,136,0,0.03)] border border-[var(--border-color)]">
+                  {[
+                    { id: 'openPayload', name: 'فتح مولد الحمولات' },
+                    { id: 'switchTerminal', name: 'التبديل للمبنى الرئيسي' },
+                    { id: 'switchAI', name: 'التبديل للمساعد العصبي' },
+                    { id: 'switchTargets', name: 'التبديل للأهداف' },
+                    { id: 'executeCommand', name: 'تنفيذ الأمر' },
+                    { id: 'toggleSidebarLeft', name: 'تبديل القائمة اليسرى' },
+                    { id: 'toggleSidebarRight', name: 'تبديل القائمة اليمنى' },
+                  ].map((shortcut) => (
+                    <div key={shortcut.id} className="space-y-1.5">
+                      <label className="text-[9px] font-bold uppercase text-[var(--text-muted)]">{shortcut.name}</label>
+                      <input 
+                        type="text"
+                        value={localLayout.shortcuts[shortcut.id as keyof typeof localLayout.shortcuts]}
+                        onChange={(e) => setLocalLayout({
+                          ...localLayout,
+                          shortcuts: {
+                            ...localLayout.shortcuts,
+                            [shortcut.id]: e.target.value
+                          }
+                        })}
+                        className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-3 py-1.5 text-xs text-[var(--text-primary)] font-mono focus:border-[var(--accent-orange)] outline-none transition-all"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-[var(--text-muted)] leading-relaxed italic">
+                  * استخدم مفاتيح مفردة (مثلاً: p, t, a, s) أو مفاتيح خاصة (مثلاً: Enter).
+                </p>
               </div>
 
               {/* Section: Threat Intelligence Feeds */}

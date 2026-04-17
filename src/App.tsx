@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldAlert, Terminal as TerminalIcon, Globe, Lock, Zap, Brain, Bug, Target as TargetIcon } from 'lucide-react';
+import { ShieldAlert, Terminal as TerminalIcon, Globe, Lock, Zap, Brain, Bug, Target as TargetIcon, EyeOff, X } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { SidebarRight } from './components/SidebarRight';
 import { SidebarLeft } from './components/SidebarLeft';
@@ -17,6 +17,9 @@ import { MasterControl } from './components/MasterControl';
 import { NeuralCoPilot } from './components/NeuralCoPilot';
 import { SettingsModal } from './components/SettingsModal';
 import { BottomBar } from './components/BottomBar';
+import { Desktop } from './components/Desktop';
+import { FileExplorer } from './components/FileExplorer';
+import { ProcessManager } from './components/ProcessManager';
 import { Phase, Target, ArsenalItem, RadarEvent, Credential, Vulnerability, Session, LayoutConfig } from './types';
 import { DEFAULT_MASTER_CONFIG, DESTRUCTIVE_COMMANDS, DEFAULT_LAYOUT_CONFIG } from './constants';
 import { useTerminal } from './hooks/useTerminal';
@@ -46,8 +49,8 @@ export default function App() {
   const [isBooting, setIsBooting] = useState(true);
   const [bootProgress, setBootProgress] = useState(0);
   const [bootLogs, setBootLogs] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'ZERODAY'>(() => {
-    return (localStorage.getItem('sentinel_activeTab') as any) || 'TERMINAL';
+  const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'ZERODAY' | 'DESKTOP' | 'FILES' | 'PROCESSES'>(() => {
+    return (localStorage.getItem('sentinel_activeTab') as any) || 'DESKTOP';
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [threatLevel, setThreatLevel] = useState(34);
@@ -597,6 +600,45 @@ export default function App() {
     }
   };
 
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const { shortcuts } = layoutConfig;
+
+      if (e.key === shortcuts.openPayload) {
+        e.preventDefault();
+        handleCommand('payload');
+      } else if (e.key === shortcuts.switchTerminal) {
+        e.preventDefault();
+        handleCommand('terminal');
+      } else if (e.key === shortcuts.switchAI) {
+        e.preventDefault();
+        handleCommand('ai');
+      } else if (e.key === shortcuts.switchTargets) {
+        e.preventDefault();
+        handleCommand('targets');
+      } else if (e.key === shortcuts.toggleSidebarLeft) {
+        e.preventDefault();
+        const newConfig = { ...layoutConfig, showSidebarLeft: !layoutConfig.showSidebarLeft };
+        setLayoutConfig(newConfig);
+        localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+      } else if (e.key === shortcuts.toggleSidebarRight) {
+        e.preventDefault();
+        const newConfig = { ...layoutConfig, showSidebarRight: !layoutConfig.showSidebarRight };
+        setLayoutConfig(newConfig);
+        localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [layoutConfig, handleCommand]);
+
   // Boot Sequence
   useEffect(() => {
     const logs = [
@@ -701,7 +743,11 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none relative cyber-grid-animated" dir="rtl">
+    <div className={`flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none relative cyber-grid-animated ${layoutConfig.stealthMode ? 'grayscale contrast-125 brightness-75' : ''}`} dir="rtl">
+      {/* Stealth Mode Overlay */}
+      {layoutConfig.stealthMode && (
+        <div className="absolute inset-0 pointer-events-none z-[9999] border-4 border-[var(--accent-cyan)] opacity-20 animate-pulse" />
+      )}
       <div className="matrix-rain" />
       <div className="scanline" />
       {layoutConfig.showTopBar && (
@@ -717,6 +763,7 @@ export default function App() {
           aiThought={lastAiThought}
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       )}
       {layoutConfig.showSystemStatus && <MemoizedSystemStatus />}
@@ -801,7 +848,53 @@ export default function App() {
 
             <div className="flex-1 relative overflow-hidden flex flex-col">
               <AnimatePresence mode="wait">
-                {activeTab === 'AI' ? (
+                {activeTab === 'DESKTOP' ? (
+                  <motion.div
+                    key="desktop-home"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 flex flex-col"
+                  >
+                    <Desktop 
+                      onOpenTab={setActiveTab} 
+                      onOpenSettings={() => setIsSettingsOpen(true)} 
+                      icons={layoutConfig.desktopIcons}
+                    />
+                  </motion.div>
+                ) : activeTab === 'FILES' ? (
+                  <motion.div
+                    key="desktop-files"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.02 }}
+                    className="absolute inset-0 flex flex-col p-4"
+                  >
+                    <FileExplorer />
+                    <button 
+                      onClick={() => setActiveTab('DESKTOP')}
+                      className="absolute top-8 right-8 z-50 p-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-all"
+                    >
+                      <X size={16} />
+                    </button>
+                  </motion.div>
+                ) : activeTab === 'PROCESSES' ? (
+                  <motion.div
+                    key="desktop-processes"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.02 }}
+                    className="absolute inset-0 flex flex-col p-4"
+                  >
+                    <ProcessManager />
+                    <button 
+                      onClick={() => setActiveTab('DESKTOP')}
+                      className="absolute top-8 right-8 z-50 p-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-all"
+                    >
+                      <X size={16} />
+                    </button>
+                  </motion.div>
+                ) : activeTab === 'AI' ? (
                   <motion.div
                     key="desktop-ai"
                     initial={{ opacity: 0, y: 10 }}
@@ -815,6 +908,12 @@ export default function App() {
                       onSendMessage={handleAction} 
                       isVisible={layoutConfig.showSidebarLeft}
                     />
+                    <button 
+                      onClick={() => setActiveTab('DESKTOP')}
+                      className="absolute top-4 right-4 z-50 p-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-all"
+                    >
+                      <X size={16} />
+                    </button>
                   </motion.div>
                 ) : activeTab === 'THREATS' ? (
                 <motion.div
@@ -968,6 +1067,26 @@ export default function App() {
       )}
     </main>
 
+      {/* Stealth Mode Quick Toggle */}
+      <button 
+        onClick={() => {
+          const newConfig = { ...layoutConfig, stealthMode: !layoutConfig.stealthMode };
+          setLayoutConfig(newConfig);
+          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+        }}
+        className={`fixed bottom-24 right-6 z-[1000] p-3 rounded-full border transition-all duration-500 shadow-lg flex items-center gap-2 group ${
+          layoutConfig.stealthMode 
+            ? 'bg-[var(--accent-cyan)] border-[var(--accent-cyan)] text-[var(--bg-primary)] shadow-[0_0_20px_rgba(0,240,255,0.4)]' 
+            : 'bg-[var(--bg-secondary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)]'
+        }`}
+        title="تبديل وضع التخفي (Stealth Mode)"
+      >
+        <EyeOff size={20} className={layoutConfig.stealthMode ? 'animate-pulse' : ''} />
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
+          {layoutConfig.stealthMode ? 'تعطيل التخفي' : 'تفعيل التخفي'}
+        </span>
+      </button>
+
       {layoutConfig.showBottomBar && (
         <MemoizedBottomBar 
           phase={phase} 
@@ -979,6 +1098,11 @@ export default function App() {
           onTabChange={setActiveTab}
           onSettingsClick={() => setIsSettingsOpen(true)}
           onAction={handleAction}
+          layoutConfig={layoutConfig}
+          onLayoutChange={(newConfig) => {
+            setLayoutConfig(newConfig);
+            localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          }}
         />
       )}
 

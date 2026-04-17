@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Activity, Cpu, Globe, AlertTriangle, Menu, X } from 'lucide-react';
+import { Shield, Activity, Cpu, Globe, AlertTriangle, Menu, X, PanelRightClose, PanelRightOpen, Maximize2, Settings } from 'lucide-react';
 import { Phase } from '../types';
 
 interface TopBarProps {
@@ -14,6 +14,7 @@ interface TopBarProps {
   aiThought?: string;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ 
@@ -27,7 +28,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   isAutonomous,
   aiThought,
   isSidebarCollapsed,
-  onToggleSidebar
+  onToggleSidebar,
+  onOpenSettings
 }) => {
   const getPhaseClass = (p: Phase) => {
     switch (p) {
@@ -52,51 +54,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <header className="flex items-center justify-between px-4 md:px-5 h-[52px] md:h-[56px] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] shrink-0 z-[100] glass-panel">
-      <div className="flex items-center gap-3 md:gap-6">
-        <button 
-          onClick={onToggleSidebar}
-          className="p-2 rounded-md hover:bg-[rgba(255,255,255,0.05)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all active:scale-90 lg:flex hidden items-center justify-center border border-transparent hover:border-[rgba(0,240,255,0.2)]"
-          title={isSidebarCollapsed ? "إظهار القائمة" : "طي القائمة"}
-        >
-          {isSidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
-        </button>
-        
-        <div className="flex items-center gap-2 md:gap-3 font-black text-lg md:text-xl tracking-wider group cursor-pointer">
-          <div className="w-7 h-7 md:w-9 md:h-9 rounded-[var(--radius-sm)] bg-linear-to-br from-[var(--accent-cyan)] to-[var(--accent-purple)] flex items-center justify-center text-sm md:text-lg font-mono font-bold text-[var(--bg-primary)] shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all duration-500 group-hover:rotate-[360deg] group-hover:scale-110">
-            S
-          </div>
-          <span className="bg-linear-to-r from-[var(--accent-cyan)] via-[var(--accent-purple)] to-[var(--accent-cyan)] bg-[length:200%_auto] animate-gradient-x bg-clip-text text-transparent glow-text hidden xs:inline">
-            SENTINEL HACKER OS
-          </span>
-        </div>
-        
-        <div className={`phase-badge px-3 md:px-5 py-1 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-bold font-mono uppercase tracking-[1px] md:tracking-[2px] ${getPhaseClass(phase)}`}>
-          <span className="hidden sm:inline">PHASE: </span>{phase} <span className="hidden md:inline">({getPhaseName(phase)})</span>
-        </div>
-
-        {isLive && (
-          <div className="flex items-center gap-2 px-3 py-1 bg-[rgba(255,51,102,0.15)] border border-[var(--accent-red)] rounded-md animate-pulse">
-            <div className="w-2 h-2 rounded-full bg-[var(--accent-red)] shadow-[0_0_10px_var(--accent-red)]" />
-            <span className="text-[10px] font-black text-[var(--accent-red)] uppercase tracking-widest">LIVE OPERATION ACTIVE</span>
-          </div>
-        )}
-
-        {isAutonomous && (
-          <div className="flex-1 max-w-[400px] mx-4 hidden lg:flex items-center gap-3 px-4 py-1.5 bg-[rgba(170,85,255,0.05)] border border-[rgba(170,85,255,0.2)] rounded-lg overflow-hidden relative group">
-            <div className="absolute inset-0 bg-linear-to-r from-transparent via-[rgba(170,85,255,0.05)] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-purple)] animate-ping" />
-              <span className="text-[9px] font-black text-[var(--accent-purple)] uppercase tracking-[2px]">AI_THOUGHT_STREAM:</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-medium text-[var(--text-primary)] truncate animate-in fade-in slide-in-from-left-2">
-                {aiThought}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
+      {/* Right Side: Status Items (In RTL these are on the right) */}
       <div className="flex items-center gap-2 md:gap-6 overflow-x-auto no-scrollbar py-1">
         <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-4 md:py-1.5 rounded-full text-[8px] md:text-[10px] font-bold bg-[var(--bg-tertiary)] border border-[var(--border-color)] font-mono shadow-inner shrink-0">
           <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-[pulse-dot_2s_infinite] ${connected ? 'bg-[var(--accent-green)] shadow-[0_0_10px_var(--accent-green)]' : 'bg-[var(--accent-red)] shadow-[0_0_10px_var(--accent-red)]'}`} />
@@ -138,6 +96,69 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="text-[var(--accent-red)] font-bold text-[9px]">{Math.round(threatLevel)}%</span>
           </div>
         </div>
+      </div>
+
+      {/* Left Side: Logo & Controls (In RTL these are on the left) */}
+      <div className="flex items-center gap-3 md:gap-4 ml-0">
+        {isAutonomous && (
+          <div className="max-w-[200px] hidden xl:flex items-center gap-3 px-4 py-1.5 bg-[rgba(170,85,255,0.05)] border border-[rgba(170,85,255,0.2)] rounded-lg overflow-hidden relative group">
+            <div className="absolute inset-0 bg-linear-to-r from-transparent via-[rgba(170,85,255,0.05)] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-purple)] animate-ping" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-medium text-[var(--text-primary)] truncate">
+                {aiThought}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {isLive && (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-[rgba(255,51,102,0.15)] border border-[var(--accent-red)] rounded-md animate-pulse">
+            <div className="w-2 h-2 rounded-full bg-[var(--accent-red)]" />
+            <span className="text-[10px] font-black text-[var(--accent-red)] uppercase tracking-widest hidden md:inline">LIVE</span>
+          </div>
+        )}
+
+        <div className={`phase-badge px-3 py-1 rounded-full text-[9px] font-bold font-mono uppercase tracking-[1px] ${getPhaseClass(phase)} hidden xs:flex`}>
+          {phase}
+        </div>
+        
+        <div className="flex items-center gap-2 md:gap-3 font-black text-lg md:text-xl tracking-wider group cursor-pointer pr-2 border-r border-[var(--border-color)] mr-2">
+          <span className="bg-linear-to-r from-[var(--accent-cyan)] via-[var(--accent-purple)] to-[var(--accent-cyan)] bg-[length:200%_auto] animate-gradient-x bg-clip-text text-transparent glow-text hidden lg:inline">
+            SENTINEL
+          </span>
+          <div className="w-7 h-7 md:w-8 md:h-8 rounded-[var(--radius-sm)] bg-linear-to-br from-[var(--accent-cyan)] to-[var(--accent-purple)] flex items-center justify-center text-xs md:text-sm font-mono font-bold text-[var(--bg-primary)] shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-all duration-500 group-hover:rotate-[360deg] group-hover:scale-110">
+            S
+          </div>
+        </div>
+
+        <button 
+          onClick={onToggleSidebar}
+          className={`p-2 rounded-lg transition-all duration-300 flex items-center justify-center border shadow-lg ${
+            isSidebarCollapsed 
+              ? 'bg-[var(--accent-cyan)] border-[var(--accent-cyan)] text-[var(--bg-primary)] shadow-[0_0_15px_rgba(0,240,255,0.4)]' 
+              : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)]'
+          } active:scale-95 group relative`}
+          title={isSidebarCollapsed ? "توسيع العرض (Maximize Screen)" : "طي القائمة (Fold Sidebar)"}
+        >
+          {isSidebarCollapsed ? (
+            <PanelRightOpen size={18} className="animate-pulse" />
+          ) : (
+            <PanelRightClose size={18} />
+          )}
+          {/* Visual indicator of swipe/expand */}
+          <div className={`absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[var(--accent-cyan)] transition-all duration-300 ${isSidebarCollapsed ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0'}`} />
+        </button>
+
+        <button 
+          onClick={onOpenSettings}
+          className="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] active:scale-95 transition-all shadow-lg hidden xs:flex items-center justify-center"
+          title="إعدادات النظام"
+        >
+          <Settings size={18} />
+        </button>
       </div>
     </header>
   );

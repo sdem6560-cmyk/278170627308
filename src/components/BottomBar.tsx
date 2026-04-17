@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, ShieldCheck, ShieldAlert, Zap, Settings, Terminal as TerminalIcon, Brain, Target, Globe, Lock } from 'lucide-react';
-import { Phase } from '../types';
+import { Clock, ShieldCheck, ShieldAlert, Zap, Settings, Terminal as TerminalIcon, Brain, Target, Globe, Lock, Keyboard, Edit2, Home, Folder, Activity } from 'lucide-react';
+import { Phase, LayoutConfig } from '../types';
 
 interface BottomBarProps {
   phase: Phase;
@@ -8,10 +8,12 @@ interface BottomBarProps {
   onAutopilotToggle: () => void;
   isAutonomous?: boolean;
   onAutonomousToggle?: () => void;
-  activeTab?: 'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD';
-  onTabChange?: (tab: 'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD') => void;
+  activeTab?: 'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'DESKTOP' | 'FILES' | 'PROCESSES';
+  onTabChange?: (tab: 'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'DESKTOP' | 'FILES' | 'PROCESSES') => void;
   onSettingsClick?: () => void;
   onAction?: (action: string) => void;
+  layoutConfig?: LayoutConfig;
+  onLayoutChange?: (config: LayoutConfig) => void;
 }
 
 export const BottomBar: React.FC<BottomBarProps> = ({ 
@@ -23,9 +25,12 @@ export const BottomBar: React.FC<BottomBarProps> = ({
   activeTab,
   onTabChange,
   onSettingsClick,
-  onAction
+  onAction,
+  layoutConfig,
+  onLayoutChange
 }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
+  const [editingShortcut, setEditingShortcut] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -36,64 +41,80 @@ export const BottomBar: React.FC<BottomBarProps> = ({
 
   return (
     <footer className="flex flex-col md:flex-row items-center justify-between bg-[var(--bg-secondary)] border-t border-[var(--border-color)] shrink-0 glass-panel relative z-[100]">
-      {/* Mobile Tab Navigation (Thumb-Driven) */}
-      <div className="flex md:hidden w-full h-16 items-center justify-around px-2 border-b border-[var(--border-color)]">
+      {/* Taskbar Navigation */}
+      <div className="flex w-full h-14 md:h-16 items-center justify-around px-2 border-b border-[var(--border-color)] bg-[rgba(255,255,255,0.01)] overflow-x-auto no-scrollbar">
+        <button 
+          onClick={() => onTabChange?.('DESKTOP')}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-[60px] h-full transition-all duration-300 ${activeTab === 'DESKTOP' ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-muted)]'}`}
+        >
+          <Home size={18} className={activeTab === 'DESKTOP' ? 'scale-110' : ''} />
+          <span className="text-[9px] font-bold uppercase tracking-tighter">الرئيسية</span>
+        </button>
+
         <button 
           onClick={() => onTabChange?.('AI')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 ${activeTab === 'AI' ? 'text-[var(--accent-purple)]' : 'text-[var(--text-muted)]'}`}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-[60px] h-full transition-all duration-300 relative group ${activeTab === 'AI' ? 'text-[var(--accent-purple)]' : 'text-[var(--text-muted)]'}`}
         >
           <Brain size={18} className={activeTab === 'AI' ? 'scale-110' : ''} />
           <span className="text-[9px] font-bold uppercase tracking-tighter">المنسق</span>
-        </button>
-
-        <button 
-          onClick={() => onTabChange?.('THREATS')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 ${activeTab === 'THREATS' ? 'text-[var(--accent-red)]' : 'text-[var(--text-muted)]'}`}
-        >
-          <ShieldAlert size={18} className={activeTab === 'THREATS' ? 'scale-110' : ''} />
-          <span className="text-[9px] font-bold uppercase tracking-tighter">التهديدات</span>
-        </button>
-
-        <button 
-          onClick={() => onTabChange?.('FEEDS')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 ${activeTab === 'FEEDS' ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-muted)]'}`}
-        >
-          <Globe size={18} className={activeTab === 'FEEDS' ? 'scale-110' : ''} />
-          <span className="text-[9px] font-bold uppercase tracking-tighter">المصادر</span>
-        </button>
-
-        <button 
-          onClick={() => onTabChange?.('VAULT')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 ${activeTab === 'VAULT' ? 'text-[var(--accent-purple)]' : 'text-[var(--text-muted)]'}`}
-        >
-          <Lock size={18} className={activeTab === 'VAULT' ? 'scale-110' : ''} />
-          <span className="text-[9px] font-bold uppercase tracking-tighter">المستودع</span>
-        </button>
-
-        <button 
-          onClick={() => onTabChange?.('PAYLOAD')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 ${activeTab === 'PAYLOAD' ? 'text-[var(--accent-orange)]' : 'text-[var(--text-muted)]'}`}
-        >
-          <Zap size={18} className={activeTab === 'PAYLOAD' ? 'scale-110' : ''} />
-          <span className="text-[9px] font-bold uppercase tracking-tighter">الحمولة</span>
+          {layoutConfig && (
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingShortcut('switchAI');
+              }}
+              className="absolute top-0 right-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-1 py-0.5 text-[6px] font-mono opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center gap-1"
+            >
+              <Keyboard size={6} />
+              {layoutConfig.shortcuts.switchAI}
+            </div>
+          )}
         </button>
 
         <button 
           onClick={() => onTabChange?.('TERMINAL')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 relative ${activeTab === 'TERMINAL' ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-muted)]'}`}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-[60px] h-full transition-all duration-300 relative group ${activeTab === 'TERMINAL' ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-muted)]'}`}
         >
           <div className={`absolute -top-4 w-12 h-12 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center justify-center shadow-lg transition-all duration-300 ${activeTab === 'TERMINAL' ? 'border-[var(--accent-cyan)] shadow-[0_0_15px_rgba(0,240,255,0.3)]' : ''}`}>
             <TerminalIcon size={24} />
           </div>
-          <span className="mt-6 text-[10px] font-bold uppercase tracking-tighter">الرادار الرئيسي</span>
+          <span className="mt-6 text-[10px] font-bold uppercase tracking-tighter">الرادار</span>
+          {layoutConfig && (
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingShortcut('switchTerminal');
+              }}
+              className="absolute top-0 right-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-1 py-0.5 text-[6px] font-mono opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center gap-1"
+            >
+              <Keyboard size={6} />
+              {layoutConfig.shortcuts.switchTerminal}
+            </div>
+          )}
         </button>
 
         <button 
           onClick={() => onTabChange?.('TARGETS')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-300 ${activeTab === 'TARGETS' ? 'text-[var(--accent-orange)]' : 'text-[var(--text-muted)]'}`}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-[60px] h-full transition-all duration-300 ${activeTab === 'TARGETS' ? 'text-[var(--accent-orange)]' : 'text-[var(--text-muted)]'}`}
         >
-          <Target size={20} className={activeTab === 'TARGETS' ? 'scale-110' : ''} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">الأهداف</span>
+          <Target size={18} className={activeTab === 'TARGETS' ? 'scale-110' : ''} />
+          <span className="text-[9px] font-bold uppercase tracking-tighter">الأهداف</span>
+        </button>
+
+        <button 
+          onClick={() => onTabChange?.('FILES')}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-[60px] h-full transition-all duration-300 ${activeTab === 'FILES' ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-muted)]'}`}
+        >
+          <Folder size={18} className={activeTab === 'FILES' ? 'scale-110' : ''} />
+          <span className="text-[9px] font-bold uppercase tracking-tighter">الملفات</span>
+        </button>
+
+        <button 
+          onClick={() => onTabChange?.('PROCESSES')}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-[60px] h-full transition-all duration-300 ${activeTab === 'PROCESSES' ? 'text-[var(--accent-green)]' : 'text-[var(--text-muted)]'}`}
+        >
+          <Activity size={18} className={activeTab === 'PROCESSES' ? 'scale-110' : ''} />
+          <span className="text-[9px] font-bold uppercase tracking-tighter">العمليات</span>
         </button>
       </div>
 
@@ -195,6 +216,40 @@ export const BottomBar: React.FC<BottomBarProps> = ({
           </button>
         </div>
       </div>
+      {/* Shortcut Editor Overlay */}
+      {editingShortcut && layoutConfig && onLayoutChange && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-6 w-full max-w-xs space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-[var(--accent-orange)]">
+              <Keyboard size={20} />
+              <h3 className="text-sm font-black uppercase tracking-widest">تعديل الاختصار</h3>
+            </div>
+            <p className="text-[10px] text-[var(--text-muted)] leading-relaxed">
+              اضغط على المفتاح الجديد لتخصيص اختصار {editingShortcut === 'switchAI' ? 'المنسق (AI)' : editingShortcut === 'switchTerminal' ? 'الرادار (Terminal)' : 'الواجهة'}.
+            </p>
+            <div className="relative">
+              <input 
+                autoFocus
+                type="text"
+                placeholder="اضغط مفتاحاً..."
+                className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md px-4 py-3 text-center text-lg font-mono text-[var(--accent-orange)] outline-none focus:border-[var(--accent-orange)]"
+                onKeyDown={(e) => {
+                  e.preventDefault();
+                  const newShortcuts = { ...layoutConfig.shortcuts, [editingShortcut]: e.key };
+                  onLayoutChange({ ...layoutConfig, shortcuts: newShortcuts });
+                  setEditingShortcut(null);
+                }}
+              />
+            </div>
+            <button 
+              onClick={() => setEditingShortcut(null)}
+              className="w-full py-2 text-[10px] font-bold uppercase text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              إلغاء
+            </button>
+          </div>
+        </div>
+      )}
     </footer>
   );
 };

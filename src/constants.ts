@@ -1,7 +1,8 @@
 export const COMMANDS = [
   'help', 'recon', 'scan', 'scan_deep', 'vulnscan', 'brute', 'exploit', 'exploit_auto', 'exfiltrate', 
   'login', 'andrax', 'netmap', 'vault', 'payload', 'feeds', 'targets', 
-  'whoami', 'ai', 'terminal', 'settings', 'status', 'clear', 'exit', 'report', 'sessions'
+  'whoami', 'ai', 'terminal', 'settings', 'status', 'clear', 'exit', 'report', 'sessions',
+  'sqlmap', 'burp', 'hydra', 'bettercap', 'wifite', 'wireshark', 'set', 'john', 'sherlock', 'ghidra', 'beef', 'mimikatz'
 ];
 
 export const DEFAULT_FEEDS = [

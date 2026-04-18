@@ -2,114 +2,22 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Folder, File, Search, ChevronRight, ChevronDown, Download, Trash2, Shield, Lock, FileCode, FileText, FileArchive, Eye, X } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
+import { FileItem } from '../types';
 
-interface FileItem {
-  id: string;
-  name: string;
-  type: 'folder' | 'file';
-  extension?: string;
-  size?: string;
-  modified: string;
-  encrypted?: boolean;
-  content?: string;
-  children?: FileItem[];
+interface FileExplorerProps {
+  files: FileItem[];
+  onFileSelect?: (file: FileItem) => void;
+  onDelete?: (id: string) => void;
 }
 
-export const FileExplorer: React.FC = () => {
+export const FileExplorer: React.FC<FileExplorerProps> = ({ 
+  files,
+  onFileSelect,
+  onDelete
+}) => {
   const [currentPath, setCurrentPath] = useState(['root', 'exfiltrated']);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
-
-  const files: FileItem[] = [
-    {
-      id: 'f1',
-      name: 'exfiltrated',
-      type: 'folder',
-      modified: '2026-04-15 14:22',
-      children: [
-        { 
-          id: 'f1-1', 
-          name: 'db_dump_alpha.sql', 
-          type: 'file', 
-          extension: 'sql', 
-          size: '124 MB', 
-          modified: '2026-04-15 14:25', 
-          encrypted: true,
-          content: 'SELECT * FROM users;\nINSERT INTO accounts (id, balance) VALUES (1, 999999);\n-- Dump complete'
-        },
-        { 
-          id: 'f1-2', 
-          name: 'user_credentials.txt', 
-          type: 'file', 
-          extension: 'txt', 
-          size: '12 KB', 
-          modified: '2026-04-15 14:28',
-          content: 'admin:shadow_master_2026\nroot:toor123\noperator:sentinel_alpha_99'
-        },
-        { 
-          id: 'f1-3', 
-          name: 'system_config.bak', 
-          type: 'file', 
-          extension: 'bak', 
-          size: '45 KB', 
-          modified: '2026-04-15 14:30',
-          content: '[SETTINGS]\nNETWORK_MODE=STEALTH\nENCRYPTION_LEVEL=MAX\nAI_AUTONOMY=0.85'
-        },
-      ]
-    },
-    {
-      id: 'f2',
-      name: 'payloads',
-      type: 'folder',
-      modified: '2026-04-16 08:45',
-      children: [
-        { 
-          id: 'f2-1', 
-          name: 'reverse_shell.elf', 
-          type: 'file', 
-          extension: 'elf', 
-          size: '1.2 MB', 
-          modified: '2026-04-16 08:46',
-          content: '[BINARY DATA: ELF EXECUTABLE X64]'
-        },
-        { 
-          id: 'f2-2', 
-          name: 'persistence_module.py', 
-          type: 'file', 
-          extension: 'py', 
-          size: '8 KB', 
-          modified: '2026-04-16 08:50',
-          content: 'import os\nimport socket\n\ndef establish_conn():\n    # Persistence logic here\n    pass'
-        },
-      ]
-    },
-    {
-      id: 'f3',
-      name: 'logs',
-      type: 'folder',
-      modified: '2026-04-16 09:10',
-      children: [
-        { 
-          id: 'f3-1', 
-          name: 'auth_failure.log', 
-          type: 'file', 
-          extension: 'log', 
-          size: '256 KB', 
-          modified: '2026-04-16 09:11',
-          content: 'April 17 01:22:45 localhost sshd[1234]: Failed password for root from 192.168.1.55 port 45222 ssh2'
-        },
-        { 
-          id: 'f3-2', 
-          name: 'network_traffic.pcap', 
-          type: 'file', 
-          extension: 'pcap', 
-          size: '450 MB', 
-          modified: '2026-04-16 09:15',
-          content: '[PACKET DATA - USE WIRESHARK MODULE TO ANALYZE]' 
-        },
-      ]
-    }
-  ];
 
   const getIcon = (item: FileItem) => {
     if (item.type === 'folder') return <Folder size={16} className="text-[var(--accent-cyan)]" />;

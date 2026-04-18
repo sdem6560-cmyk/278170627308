@@ -107,6 +107,18 @@ export interface DesktopIcon {
   isVisible: boolean;
 }
 
+export interface FileItem {
+  id: string;
+  name: string;
+  type: 'folder' | 'file';
+  extension?: string;
+  size?: string;
+  modified: string;
+  encrypted?: boolean;
+  content?: string;
+  children?: FileItem[];
+}
+
 export interface LayoutConfig {
   showSidebarLeft: boolean;
   showSidebarRight: boolean;

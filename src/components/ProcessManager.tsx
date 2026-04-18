@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Activity, Cpu, Zap, X, Shield, Terminal, Search } from 'lucide-react';
 
 interface Process {
-  pid: number;
+  pid: number | string;
   name: string;
   user: string;
   cpu: number;
@@ -12,7 +12,11 @@ interface Process {
   type: 'system' | 'exploit' | 'recon';
 }
 
-export const ProcessManager: React.FC = () => {
+interface ProcessManagerProps {
+  externalProcesses?: {id: string, name: string, startTime: string}[];
+}
+
+export const ProcessManager: React.FC<ProcessManagerProps> = ({ externalProcesses = [] }) => {
   const [processes, setProcesses] = useState<Process[]>([]);
   const [filter, setFilter] = useState('');
 
@@ -21,11 +25,24 @@ export const ProcessManager: React.FC = () => {
       { pid: 1024, name: 'sentinel_core', user: 'root', cpu: 2.4, mem: 124, status: 'running', type: 'system' },
       { pid: 2048, name: 'neural_link', user: 'root', cpu: 15.2, mem: 512, status: 'running', type: 'system' },
       { pid: 3096, name: 'recon_scanner', user: 'sentinel', cpu: 45.8, mem: 256, status: 'running', type: 'recon' },
-      { pid: 4112, name: 'msf_handler', user: 'sentinel', cpu: 1.2, mem: 88, status: 'sleeping', type: 'exploit' },
-      { pid: 5224, name: 'brute_force_v3', user: 'sentinel', cpu: 98.4, mem: 1024, status: 'running', type: 'exploit' },
       { pid: 6336, name: 'exfil_tunnel', user: 'root', cpu: 0.5, mem: 32, status: 'sleeping', type: 'recon' },
     ];
-    setProcesses(initialProcesses);
+    
+    // Merge external processes
+    const merged = [
+      ...initialProcesses,
+      ...externalProcesses.map(ext => ({
+        pid: ext.id,
+        name: ext.name.toLowerCase(),
+        user: 'operator',
+        cpu: 10 + Math.random() * 20,
+        mem: 50 + Math.random() * 100,
+        status: 'running' as const,
+        type: 'exploit' as const
+      }))
+    ];
+
+    setProcesses(merged);
 
     const interval = setInterval(() => {
       setProcesses(prev => prev.map(p => ({
@@ -36,7 +53,7 @@ export const ProcessManager: React.FC = () => {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [externalProcesses]);
 
   const filteredProcesses = processes.filter(p => 
     p.name.toLowerCase().includes(filter.toLowerCase()) || 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Zap, ShieldAlert, Settings, Target as TargetIcon, Radio, ChevronLeft, SlidersHorizontal, Filter, Layers, Brain, Sparkles, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search, Zap, ShieldAlert, Settings, Target as TargetIcon, Radio, ChevronLeft, SlidersHorizontal, Filter, Layers, Brain, Sparkles, AlertTriangle, Globe, Info } from 'lucide-react';
 import { Target, ArsenalItem, RadarEvent } from '../types';
 import { getExploitRecommendation } from '../services/geminiService';
 
@@ -7,6 +8,7 @@ interface SidebarRightProps {
   targets: Target[];
   activeTargetId: string | null;
   onTargetSelect: (id: string) => void;
+  onAddTarget?: (ip: string) => void;
   arsenal: ArsenalItem[];
   radar: RadarEvent[];
   onUpdateParam?: (itemId: string, paramId: string, newValue: any) => void;
@@ -18,6 +20,7 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
   targets, 
   activeTargetId, 
   onTargetSelect, 
+  onAddTarget,
   arsenal,
   radar,
   onUpdateParam,
@@ -25,6 +28,8 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
   isVisible = true
 }) => {
   const [tuningItemId, setTuningItemId] = useState<string | null>(null);
+  const [hoveredArsenalId, setHoveredArsenalId] = useState<string | null>(null);
+  const [newTargetIp, setNewTargetIp] = useState('');
   const [groupBy, setGroupBy] = useState<'none' | 'os' | 'status'>('none');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recommendation, setRecommendation] = useState<{
@@ -216,6 +221,43 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
                 <span className="bg-[var(--bg-input)] px-2.5 py-0.5 rounded-full text-[9px] text-[var(--accent-cyan)] border border-[rgba(0,240,255,0.2)] font-mono">{targets.length}</span>
               </div>
             </div>
+            
+            <div className="px-4 py-3 border-b border-[var(--border-color)] bg-[rgba(0,240,255,0.02)] space-y-2 shrink-0">
+              <div className="text-[9px] font-black uppercase tracking-widest text-[var(--text-secondary)] opacity-70">إضافة هدف جديد (New Target)</div>
+              <div className="flex gap-2">
+                <div className="relative flex-1 group">
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-[var(--accent-cyan)] transition-colors">
+                    <Globe size={12} />
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Enter IP (e.g. 10.0.0.5)"
+                    value={newTargetIp}
+                    onChange={(e) => setNewTargetIp(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newTargetIp.trim()) {
+                        onAddTarget?.(newTargetIp.trim());
+                        setNewTargetIp('');
+                      }
+                    }}
+                    className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-md pl-8 pr-3 py-1.5 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] focus:shadow-[0_0_10px_rgba(0,240,255,0.1)] transition-all"
+                  />
+                </div>
+                <button 
+                  onClick={() => {
+                    if (newTargetIp.trim()) {
+                      onAddTarget?.(newTargetIp.trim());
+                      setNewTargetIp('');
+                    }
+                  }}
+                  disabled={!newTargetIp.trim()}
+                  className="px-3 bg-[var(--accent-cyan)] text-[var(--bg-primary)] rounded-md font-bold text-[10px] uppercase hover:brightness-110 active:scale-95 transition-all disabled:opacity-30 disabled:scale-100 whitespace-nowrap"
+                >
+                  إضافة
+                </button>
+              </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
               {(Object.entries(groupedTargets) as [string, Target[]][]).map(([groupName, groupTargets]) => (
                 <div key={groupName} className="mb-4">
@@ -323,14 +365,74 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
               </div>
               <span className="bg-[var(--bg-input)] px-2.5 py-0.5 rounded-full text-[9px] text-[var(--accent-orange)] border border-[rgba(255,136,0,0.2)] font-mono">{arsenal.length}</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar relative">
               {arsenal.map(item => (
                 <div 
                   key={item.id} 
+                  onMouseEnter={() => setHoveredArsenalId(item.id)}
+                  onMouseLeave={() => setHoveredArsenalId(null)}
                   onClick={() => onAction?.(item.type === 'scan' ? 'scan' : item.type === 'exploit' ? 'exploit' : item.name.toLowerCase())}
-                  className="flex items-center gap-4 md:gap-3 p-3.5 md:p-2.5 rounded-[var(--radius-lg)] md:rounded-[var(--radius-md)] mb-2 md:mb-1 cursor-pointer hover:bg-[rgba(255,255,255,0.05)] transition-all duration-300 group relative overflow-hidden"
+                  className="flex items-center gap-4 md:gap-3 p-3.5 md:p-2.5 rounded-[var(--radius-lg)] md:rounded-[var(--radius-md)] mb-2 md:mb-1 cursor-pointer hover:bg-[rgba(255,255,255,0.05)] transition-all duration-300 group relative overflow-visible"
                 >
                   <div className="absolute inset-0 bg-linear-to-r from-transparent via-[rgba(255,136,0,0.03)] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  
+                  {/* Tooltip */}
+                  <AnimatePresence>
+                    {hoveredArsenalId === item.id && (
+                      <motion.div
+                        initial={{ opacity: 0, x: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: 10, scale: 0.95 }}
+                        className="absolute right-full mr-2 top-0 w-64 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl p-4 z-[100] backdrop-blur-xl pointer-events-none"
+                        style={{ boxShadow: '0 0 30px rgba(0,0,0,0.5)' }}
+                      >
+                        <div className="flex items-center gap-3 mb-3 pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                          <div className={`p-1.5 rounded bg-[rgba(255,255,255,0.05)] ${
+                            item.type === 'scan' ? 'text-[var(--accent-cyan)]' :
+                            item.type === 'exploit' ? 'text-[var(--accent-orange)]' :
+                            'text-[var(--accent-green)]'
+                          }`}>
+                            {item.type === 'scan' ? <Search size={14} /> : <Zap size={14} />}
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-black uppercase tracking-wider text-[var(--text-primary)]">{item.name}</div>
+                            <div className="text-[8px] font-mono opacity-50 uppercase tracking-tighter">{item.type} module v1.0.4</div>
+                          </div>
+                        </div>
+                        
+                        <p className="text-[10px] text-[var(--text-secondary)] leading-tight mb-4">
+                          {item.desc}
+                        </p>
+
+                        {item.params && item.params.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-[9px] font-bold uppercase text-[var(--text-muted)] border-b border-[rgba(255,255,255,0.05)] pb-1">Config Parameters</div>
+                            <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                              {item.params.slice(0, 4).map(p => (
+                                <React.Fragment key={p.id}>
+                                  <span className="text-[8px] font-mono text-[var(--text-muted)] truncate">{p.name}:</span>
+                                  <span className="text-[8px] font-mono text-[var(--accent-cyan)] truncate text-right">
+                                    {typeof p.value === 'boolean' ? (p.value ? 'ON' : 'OFF') : p.value}
+                                  </span>
+                                </React.Fragment>
+                              ))}
+                              {item.params.length > 4 && (
+                                <span className="col-span-2 text-[7px] text-[var(--text-muted)] italic text-right">+ {item.params.length - 4} more</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="mt-3 pt-2 border-t border-[rgba(255,255,255,0.05)] flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[8px] font-mono text-[var(--accent-green)]">
+                            <ShieldAlert size={8} /> AUTH_STABLE
+                          </div>
+                          <div className="text-[8px] font-mono text-[var(--text-muted)]">LATENCY: 14ms</div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   <div className={`w-9 h-9 md:w-8 md:h-8 rounded-[var(--radius-sm)] flex items-center justify-center text-sm shrink-0 transition-transform group-hover:scale-110 ${
                     item.type === 'scan' ? 'bg-[rgba(0,240,255,0.1)] text-[var(--accent-cyan)] border border-[rgba(0,240,255,0.1)]' :
                     item.type === 'exploit' ? 'bg-[rgba(255,136,0,0.1)] text-[var(--accent-orange)] border border-[rgba(255,136,0,0.1)]' :

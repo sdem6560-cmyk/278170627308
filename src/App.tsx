@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert, Terminal as TerminalIcon, Globe, Lock, Zap, Brain, Bug, Target as TargetIcon, EyeOff, X, Settings } from 'lucide-react';
+import { playSound } from './lib/soundUtils';
 import { TopBar } from './components/TopBar';
 import { SidebarRight } from './components/SidebarRight';
 import { SidebarLeft } from './components/SidebarLeft';
@@ -16,11 +17,11 @@ import { SystemStatus } from './components/SystemStatus';
 import { MasterControl } from './components/MasterControl';
 import { NeuralCoPilot } from './components/NeuralCoPilot';
 import { SettingsModal } from './components/SettingsModal';
-import { BottomBar } from './components/BottomBar';
+import { Taskbar } from './components/Taskbar';
 import { Desktop } from './components/Desktop';
 import { FileExplorer } from './components/FileExplorer';
 import { ProcessManager } from './components/ProcessManager';
-import { Phase, Target, ArsenalItem, RadarEvent, Credential, Vulnerability, Session, LayoutConfig } from './types';
+import { Phase, Target, ArsenalItem, RadarEvent, Credential, Vulnerability, Session, LayoutConfig, FileItem } from './types';
 import { DEFAULT_MASTER_CONFIG, DESTRUCTIVE_COMMANDS, DEFAULT_LAYOUT_CONFIG } from './constants';
 import { useTerminal } from './hooks/useTerminal';
 import { useThreatIntelligence } from './hooks/useThreatIntelligence';
@@ -30,7 +31,7 @@ import { fetchShodanDetails, fetchVirusTotalReport } from './services/threatInte
 
 // Memoized components for performance
 const MemoizedTopBar = React.memo(TopBar);
-const MemoizedBottomBar = React.memo(BottomBar);
+const MemoizedTaskbar = React.memo(Taskbar);
 const MemoizedSystemStatus = React.memo(SystemStatus);
 const MemoizedNeuralCoPilot = React.memo(NeuralCoPilot);
 
@@ -52,6 +53,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'ZERODAY' | 'DESKTOP' | 'FILES' | 'PROCESSES'>(() => {
     return (localStorage.getItem('sentinel_activeTab') as any) || 'DESKTOP';
   });
+  const [runningProcesses, setRunningProcesses] = useState<{id: string, name: string, startTime: string}[]>([
+    { id: 'p_kernel', name: 'Kernel_Alpha_v4', startTime: new Date().toLocaleTimeString() }
+  ]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [threatLevel, setThreatLevel] = useState(34);
   const [credentials, setCredentials] = useState<Credential[]>([]);
@@ -60,6 +64,82 @@ export default function App() {
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [isAutonomous, setIsAutonomous] = useState(false);
   const [lastAiThought, setLastAiThought] = useState<string>('جاري تهيئة العقل الاصطناعي...');
+  const [files, setFiles] = useState<FileItem[]>(() => {
+    const saved = localStorage.getItem('sentinel_files');
+    if (saved) return JSON.parse(saved);
+    return [
+      {
+        id: 'f1',
+        name: 'exfiltrated',
+        type: 'folder',
+        modified: '2026-04-15 14:22',
+        children: [
+          { 
+            id: 'f1-1', 
+            name: 'db_dump_alpha.sql', 
+            type: 'file', 
+            extension: 'sql', 
+            size: '124 MB', 
+            modified: '2026-04-15 14:25', 
+            encrypted: true,
+            content: 'SELECT * FROM users;\nINSERT INTO accounts (id, balance) VALUES (1, 999999);\n-- Dump complete'
+          },
+          { 
+            id: 'f1-2', 
+            name: 'user_credentials.txt', 
+            type: 'file', 
+            extension: 'txt', 
+            size: '12 KB', 
+            modified: '2026-04-15 14:28',
+            content: 'admin:shadow_master_2026\nroot:toor123\noperator:sentinel_alpha_99'
+          }
+        ]
+      },
+      {
+        id: 'f2',
+        name: 'payloads',
+        type: 'folder',
+        modified: '2026-04-16 08:45',
+        children: [
+          { 
+            id: 'f2-1', 
+            name: 'reverse_shell.elf', 
+            type: 'file', 
+            extension: 'elf', 
+            size: '1.2 MB', 
+            modified: '2026-04-16 08:46',
+            content: '[BINARY DATA: ELF EXECUTABLE X64]'
+          }
+        ]
+      },
+      {
+        id: 'f3',
+        name: 'logs',
+        type: 'folder',
+        modified: '2026-04-16 09:10',
+        children: [
+          { 
+            id: 'f3-1', 
+            name: 'auth_failure.log', 
+            type: 'file', 
+            extension: 'log', 
+            size: '256 KB', 
+            modified: '2026-04-16 09:11',
+            content: 'April 17 01:22:45 localhost sshd[1234]: Failed password for root from 192.168.1.55 port 45222 ssh2'
+          },
+          { 
+            id: 'f3-3', 
+            name: 'system_errors.log', 
+            type: 'file', 
+            extension: 'log', 
+            size: '0 KB', 
+            modified: new Date().toISOString().split('T')[0],
+            content: '--- SYSTEM ERROR LOG INITIALIZED ---\n'
+          }
+        ]
+      }
+    ];
+  });
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [masterConfig, setMasterConfig] = useState<string>(() => {
@@ -135,77 +215,167 @@ export default function App() {
       { 
         id: 'a1', 
         name: 'Nmap_Stealth', 
-        desc: 'فحص المنافذ بشكل خفي', 
+        desc: 'فحص المنافذ والخدمات بشكل خفي وشامل', 
         type: 'scan',
         params: [
           { id: 'p1', name: 'Intensivity', value: 3, type: 'number' },
+          { id: 'p3', name: 'Service Detection', value: true, type: 'toggle' },
           { id: 'p2', name: 'Timing', value: 'T4', type: 'select', options: ['T1', 'T2', 'T3', 'T4', 'T5'] }
         ]
       },
       { 
         id: 'a2', 
         name: 'Metasploit_Core', 
-        desc: 'محرك الاستغلال الرئيسي', 
+        desc: 'محرك الاستغلال الرئيسي مع مكتبة واسعة من الثغرات المحدثة', 
         type: 'exploit',
         params: [
-          { id: 'p3', name: 'LHOST', value: '192.168.1.10', type: 'text' },
-          { id: 'p4', name: 'Payload', value: 'meterpreter_reverse_tcp', type: 'select', options: ['meterpreter_reverse_tcp', 'shell_reverse_tcp', 'meterpreter_bind_tcp'] }
+          { id: 'p4', name: 'LHOST', value: '192.168.1.10', type: 'text' },
+          { id: 'p5', name: 'Payload', value: 'meterpreter_reverse_tcp', type: 'select', options: ['meterpreter_reverse_tcp', 'shell_reverse_tcp', 'meterpreter_bind_tcp'] }
         ]
       },
       { 
         id: 'a3', 
         name: 'ANDRAX_Mobile', 
-        desc: 'منصة اختبار اختراق الأندرويد', 
+        desc: 'اختراق الهواتف والأجهزة المحمولة عبر ثغرات الأندرويد', 
         type: 'exploit',
         params: [
-          { id: 'p5', name: 'Target SDK', value: 33, type: 'number' },
-          { id: 'p6', name: 'Auto-Root', value: true, type: 'toggle' }
+          { id: 'p6', name: 'Target SDK', value: 33, type: 'number' },
+          { id: 'p7', name: 'Auto-Root', value: true, type: 'toggle' }
         ]
       },
       { 
         id: 'a4', 
         name: 'Mimikatz_Lite', 
-        desc: 'استخراج كلمات المرور', 
+        desc: 'استخراج كلمات المرور والرموز المشفرة من ذاكرة النظام', 
         type: 'post',
         params: [
-          { id: 'p7', name: 'Dump LSASS', value: true, type: 'toggle' },
-          { id: 'p8', name: 'Output Format', value: 'text', type: 'select', options: ['text', 'json', 'csv'] }
+          { id: 'p8', name: 'Dump LSASS', value: true, type: 'toggle' },
+          { id: 'p9', name: 'Output Format', value: 'text', type: 'select', options: ['text', 'json', 'csv'] }
         ]
       },
       { 
         id: 'a5', 
         name: 'SQL_Injector_Pro', 
-        desc: 'استغلال ثغرات حقن قواعد البيانات', 
+        desc: 'أداة (sqlmap) لاكتشاف واستغلال ثغرات قواعد البيانات', 
         type: 'exploit',
         params: [
-          { id: 'p9', name: 'Method', value: 'GET', type: 'select', options: ['GET', 'POST', 'HEADER'] },
-          { id: 'p10', name: 'Payload', value: 'Boolean-based', type: 'select', options: ['Boolean-based', 'Error-based', 'Union-based', 'Time-based'] },
-          { id: 'p11', name: 'Depth', value: 5, type: 'number' }
+          { id: 'p10', name: 'Method', value: 'GET', type: 'select', options: ['GET', 'POST', 'HEADER'] },
+          { id: 'p11', name: 'Payload', value: 'Boolean-based', type: 'select', options: ['Boolean-based', 'Error-based', 'Union-based', 'Time-based'] },
+          { id: 'p12', name: 'Depth', value: 5, type: 'number' }
         ]
       },
       { 
         id: 'a6', 
         name: 'XSS_Reflector', 
-        desc: 'حقن نصوص برمجية في المتصفح', 
+        desc: 'حقن نصوص برمجية (JS) في متصفحات الضحايا', 
         type: 'exploit',
         params: [
-          { id: 'p12', name: 'Type', value: 'Reflected', type: 'select', options: ['Stored', 'Reflected', 'DOM-based'] },
-          { id: 'p13', name: 'Bypass WAF', value: true, type: 'toggle' },
-          { id: 'p14', name: 'Payload Type', value: 'Alert', type: 'select', options: ['Alert', 'Cookie Stealer', 'Keylogger'] }
+          { id: 'p13', name: 'Type', value: 'Reflected', type: 'select', options: ['Stored', 'Reflected', 'DOM-based'] },
+          { id: 'p14', name: 'Bypass WAF', value: true, type: 'toggle' },
+          { id: 'p15', name: 'Payload Type', value: 'Alert', type: 'select', options: ['Alert', 'Cookie Stealer', 'Keylogger'] }
         ]
       },
       { 
         id: 'a7', 
         name: 'PrivEsc_Suite', 
-        desc: 'رفع صلاحيات المستخدم للنظام', 
+        desc: 'رفع صلاحيات المستخدم إلى Root/Admin', 
         type: 'post',
         params: [
-          { id: 'p15', name: 'Target OS', value: 'Linux', type: 'select', options: ['Linux', 'Windows', 'macOS'] },
-          { id: 'p16', name: 'Aggressive', value: false, type: 'toggle' },
-          { id: 'p17', name: 'Exploit DB Sync', value: true, type: 'toggle' }
+          { id: 'p16', name: 'Target OS', value: 'Linux', type: 'select', options: ['Linux', 'Windows', 'macOS'] },
+          { id: 'p17', name: 'Aggressive', value: false, type: 'toggle' },
+          { id: 'p18', name: 'Exploit DB Sync', value: true, type: 'toggle' }
         ]
       },
-      { id: 'a8', name: 'ProxyChains', desc: 'توجيه الحركة عبر وكلاء', type: 'util' },
+      {
+        id: 'a8',
+        name: 'Hydra_Brute',
+        desc: 'هجوم القوة الغاشمة (Bruteforce) للخدمات الشبكية',
+        type: 'exploit',
+        params: [
+          { id: 'p19', name: 'Wordlist', value: 'rockyou.txt', type: 'text' },
+          { id: 'p20', name: 'Protocol', value: 'ssh', type: 'select', options: ['ssh', 'ftp', 'rdp', 'http-post-form'] }
+        ]
+      },
+      {
+        id: 'a9',
+        name: 'Bettercap_MITM',
+        desc: 'اعتراض بيانات الشبكة وتنفيذ هجمات الرجل في المنتصف',
+        type: 'exploit',
+        params: [
+          { id: 'p21', name: 'ARP Spoofing', value: true, type: 'toggle' },
+          { id: 'p22', name: 'DNS Hijack', value: false, type: 'toggle' }
+        ]
+      },
+      {
+        id: 'a10',
+        name: 'Wifite_Next',
+        desc: 'اختراق شبكات الـ WiFi وتجاوز تشفير WPA/WPS',
+        type: 'exploit',
+        params: [
+          { id: 'p23', name: 'Interface', value: 'wlan0mon', type: 'text' },
+          { id: 'p24', name: 'Mode', value: 'Aggressive', type: 'select', options: ['Aggressive', 'Stealth', 'Handshake Only'] }
+        ]
+      },
+      {
+        id: 'a11',
+        name: 'Burp_Sentinel',
+        desc: 'تحليل وفحص حركة بيانات الويب وتعديل الطلبات',
+        type: 'scan',
+        params: [
+          { id: 'p25', name: 'Proxy Listen', value: 8080, type: 'number' },
+          { id: 'p26', name: 'Active Scan', value: true, type: 'toggle' }
+        ]
+      },
+      {
+        id: 'a12',
+        name: 'Wireshark_Sniff',
+        desc: 'تحليل حزم البيانات (Packets) واستخراج المعلومات الصافية',
+        type: 'scan',
+        params: [
+          { id: 'p27', name: 'Filter', value: 'tcp', type: 'text' },
+          { id: 'p28', name: 'Dump Path', value: '/tmp/capture.pcap', type: 'text' }
+        ]
+      },
+      {
+        id: 'a13',
+        name: 'SET_Phisher',
+        desc: 'أدوات الهندسة الاجتماعية لإنشاء صفحات هبوط مزيفة',
+        type: 'exploit',
+        params: [
+          { id: 'p29', name: 'Vector', value: 'Credential Harvester', type: 'select', options: ['Credential Harvester', 'Web-Jack', 'Spear-Phishing'] }
+        ]
+      },
+      {
+        id: 'a14',
+        name: 'John_Hash',
+        desc: 'كسر تشفير كلمات المرور (Hash Cracking) المتقدم',
+        type: 'util',
+        params: [
+          { id: 'p30', name: 'Hash Type', value: 'sha256', type: 'select', options: ['md5', 'sha256', 'ntlm', 'bcrypt'] }
+        ]
+      },
+      {
+        id: 'a15',
+        name: 'Sherlock_OSINT',
+        desc: 'تتبع الحسابات عبر أكثر من 300 موقع تواصل اجتماعي',
+        type: 'scan',
+        params: [
+          { id: 'p31', name: 'Username', value: 'target_user', type: 'text' }
+        ]
+      },
+      {
+        id: 'a16',
+        name: 'Ghidra_RE',
+        desc: 'تحليل الهندسة العكسية للملفات التنفيذية والبرامج',
+        type: 'util'
+      },
+      {
+        id: 'a17',
+        name: 'Beef_Framework',
+        desc: 'استغلال متصفحات الويب والتحكم بها عن بُعد',
+        type: 'exploit'
+      },
+      { id: 'a18', name: 'ProxyChains', desc: 'توجيه الحركة عبر وكلاء (Tor/Socks)', type: 'util' }
     ];
     return saved ? JSON.parse(saved) : initial;
   });
@@ -221,6 +391,73 @@ export default function App() {
       return item;
     }));
   };
+
+  const handleAddTarget = (ip: string) => {
+    const newTarget: Target = {
+      id: generateId(),
+      name: `NEW_NODE_${targets.length + 1}`,
+      ip: ip,
+      status: 'scanning',
+    };
+    
+    setTargets(prev => [...prev, newTarget]);
+    setActiveTargetId(newTarget.id);
+    
+    playSound('bleep');
+    addTerminalLine(`[!] Acquiring target: ${ip}...`, 'info');
+    
+    setRadar(prev => [
+      { id: generateId(), time: new Date().toLocaleTimeString([], { hour12: false }), message: `Target acquisition initiated: <span class="highlight">${ip}</span>` },
+      ...prev.slice(0, 19) // Keep radar history manageable
+    ]);
+    
+    // Simulate reconnaissance
+    setTimeout(() => {
+      setTargets(prev => prev.map(t => t.ip === ip ? {
+        ...t,
+        status: 'online',
+        os: 'Detected: Universal Platform',
+        ports: [80, 443, 22, 21, 3306],
+        services: ['Apache', 'OpenSSL', 'OpenSSH', 'ProFTPD', 'MySQL']
+      } : t));
+      playSound('success');
+      addTerminalLine(`[+] Reconnaissance complete for ${ip}. Intelligence updated.`, 'success');
+      setRadar(prev => [
+        { id: generateId(), time: new Date().toLocaleTimeString([], { hour12: false }), message: `Systems normalized for <span class="highlight">${ip}</span>. OS detected: Linux.` },
+        ...prev.slice(0, 19)
+      ]);
+    }, 4000);
+  };
+
+  const logSystemError = useCallback((error: string) => {
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const logEntry = `[${timestamp}] ERROR: ${error}\n`;
+    
+    setFiles(prev => {
+      const newFiles = prev.map(folder => {
+        if (folder.name === 'logs' && folder.children) {
+          return {
+            ...folder,
+            children: folder.children.map(file => {
+              if (file.name === 'system_errors.log') {
+                const newContent = (file.content || '') + logEntry;
+                return {
+                  ...file,
+                  content: newContent,
+                  size: `${Math.ceil(newContent.length / 1024)} KB`,
+                  modified: timestamp
+                };
+              }
+              return file;
+            })
+          };
+        }
+        return folder;
+      });
+      localStorage.setItem('sentinel_files', JSON.stringify(newFiles));
+      return newFiles;
+    });
+  }, []);
 
   const [radar, setRadar] = useState<RadarEvent[]>(() => {
     const saved = localStorage.getItem('sentinel_radar');
@@ -252,6 +489,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('sentinel_activeTab', activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    const errorHandler = (event: ErrorEvent) => {
+      logSystemError(event.message || 'Unknown runtime error');
+    };
+    
+    const rejectionHandler = (event: PromiseRejectionEvent) => {
+      logSystemError(`Unhandled Promise Rejection: ${event.reason}`);
+    };
+
+    window.addEventListener('error', errorHandler);
+    window.addEventListener('unhandledrejection', rejectionHandler);
+    
+    return () => {
+      window.removeEventListener('error', errorHandler);
+      window.removeEventListener('unhandledrejection', rejectionHandler);
+    };
+  }, [logSystemError]);
 
   useEffect(() => {
     localStorage.setItem('sentinel_layout_config', JSON.stringify(layoutConfig));
@@ -339,6 +594,8 @@ export default function App() {
         addTerminalLine('  clear     - Clear terminal output', 'system');
         addTerminalLine('  live      - Start live full-scale operation', 'error');
         addTerminalLine('  exit      - Terminate secure session', 'system');
+        addTerminalLine('TOOLKIT EXECUTABLES:', 'warning');
+        addTerminalLine('  Type any tool name from the Arsenal (e.g., sqlmap, wireshark, hydra) to launch.', 'info');
       } else if (firstWord === 'live') {
         startLiveOperation();
       } else if (firstWord === 'deploy') {
@@ -586,7 +843,37 @@ export default function App() {
       } else if (firstWord === 'clear') {
         clearTerminal();
       } else {
-        addTerminalLine(`Command not found: ${trimmedCmd}`, 'error');
+        // Dynamic arsenal tool handler
+        const tool = arsenal.find(item => 
+          item.name.toLowerCase() === firstWord || 
+          item.name.toLowerCase().startsWith(firstWord)
+        );
+        
+        if (tool) {
+          playSound('bleep');
+          addTerminalLine(`[!] Initiating tool signature: ${tool.name}...`, 'warning');
+          const nextPhase = tool.type === 'scan' ? 'ENUM' : tool.type === 'exploit' ? 'EXPLOIT' : tool.type === 'post' ? 'POST' : phase;
+          setPhase(nextPhase);
+          
+          const processId = `proc_${generateId()}`;
+          setRunningProcesses(prev => [{ id: processId, name: tool.name, startTime: new Date().toLocaleTimeString() }, ...prev]);
+
+          setTimeout(() => {
+            addTerminalLine(`[*] ${tool.name} engine active. Analyzing target vectors...`, 'info');
+            setTimeout(() => {
+              playSound('success');
+              addTerminalLine(`[+] ${tool.name} operation successful. Intelligence gathered and synchronized.`, 'success');
+              setOpCount(prev => prev + 1);
+              // Terminate process after success simulation
+              setTimeout(() => {
+                setRunningProcesses(prev => prev.filter(p => p.id !== processId));
+              }, 2000);
+            }, 2500);
+          }, 1000);
+        } else {
+          playSound('error');
+          addTerminalLine(`Command not found: ${trimmedCmd}`, 'error');
+        }
       }
     }, 500);
   };
@@ -605,10 +892,13 @@ export default function App() {
       { cmd: 'recon', delay: 1000 },
       { cmd: 'scan_deep', delay: 3500 },
       { cmd: 'vulnscan', delay: 6500 },
-      { cmd: 'brute', delay: 10500 },
-      { cmd: 'exploit_auto', delay: 15500 },
-      { cmd: 'exfiltrate', delay: 21500 },
-      { cmd: 'report', delay: 26000 }
+      { cmd: 'sqlmap', delay: 10500 },
+      { cmd: 'bettercap', delay: 14500 },
+      { cmd: 'exploit_auto', delay: 19500 },
+      { cmd: 'beef', delay: 24500 },
+      { cmd: 'wireshark', delay: 28500 },
+      { cmd: 'exfiltrate', delay: 33500 },
+      { cmd: 'report', delay: 38000 }
     ];
 
     sequence.forEach(step => {
@@ -619,14 +909,14 @@ export default function App() {
 
     setTimeout(() => {
       setIsLiveMode(false);
-      addTerminalLine('تم اكتمال التشغيل المباشر. تم تأمين النظام والأهداف.', 'success');
+      addTerminalLine('تم اكتمال التشغيل الشامل (GLOBAL ASSAULT COMPLETED). تم اختراق كافة المتجهات وتأمين البيانات.', 'success');
       setAiThoughts(prev => [{
         id: generateId(),
         type: 'alert',
-        text: 'اكتملت عملية التشغيل الشامل بنجاح. تم اختراق جميع الأهداف واستخراج البيانات.',
+        text: 'تم الانتهاء من بروتوكول التشغيل الشامل. تم استغلال كافة الثغرات بنجاح بنسبة نجاح 100%.',
         timestamp: new Date().toLocaleTimeString(),
       }, ...prev]);
-    }, 30000);
+    }, 42000);
   }, [isLiveMode, handleCommand, addTerminalLine, setAiThoughts]);
 
   const toggleAutopilot = () => {
@@ -706,14 +996,23 @@ export default function App() {
     ];
     
     let currentLog = 0;
+    playSound('boot');
     const interval = setInterval(() => {
       if (currentLog < logs.length) {
+        playSound('bleep');
         setBootLogs(prev => [...prev, logs[currentLog]]);
         setBootProgress((currentLog + 1) * (100 / logs.length));
         currentLog++;
       } else {
         clearInterval(interval);
-        setTimeout(() => setIsBooting(false), 1000);
+        playSound('success');
+        setTimeout(() => {
+          setIsBooting(false);
+          // Automatically start live operation after boot
+          setTimeout(() => {
+            handleCommandRef.current('live');
+          }, 1500);
+        }, 1000);
       }
     }, 400);
     
@@ -943,7 +1242,22 @@ export default function App() {
                     exit={{ opacity: 0, scale: 1.02 }}
                     className="absolute inset-0 flex flex-col p-4"
                   >
-                    <FileExplorer />
+                    <FileExplorer 
+                      files={files} 
+                      onDelete={(id) => {
+                        setFiles(prev => {
+                          const removeRecursive = (items: FileItem[]): FileItem[] => {
+                            return items.filter(item => item.id !== id).map(item => ({
+                              ...item,
+                              children: item.children ? removeRecursive(item.children) : undefined
+                            }));
+                          };
+                          const n = removeRecursive(prev);
+                          localStorage.setItem('sentinel_files', JSON.stringify(n));
+                          return n;
+                        });
+                      }}
+                    />
                     <button 
                       onClick={() => setActiveTab('DESKTOP')}
                       className="absolute top-8 right-8 z-50 p-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-all"
@@ -959,7 +1273,7 @@ export default function App() {
                     exit={{ opacity: 0, scale: 1.02 }}
                     className="absolute inset-0 flex flex-col p-4"
                   >
-                    <ProcessManager />
+                    <ProcessManager externalProcesses={runningProcesses} />
                     <button 
                       onClick={() => setActiveTab('DESKTOP')}
                       className="absolute top-8 right-8 z-50 p-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-all"
@@ -1131,6 +1445,7 @@ export default function App() {
             targets={targets} 
             activeTargetId={activeTargetId} 
             onTargetSelect={setActiveTargetId}
+            onAddTarget={handleAddTarget}
             arsenal={arsenal}
             radar={radar}
             onUpdateParam={updateArsenalParam}
@@ -1162,21 +1477,14 @@ export default function App() {
       </button>
 
       {layoutConfig.showBottomBar && (
-        <MemoizedBottomBar 
-          phase={phase} 
-          autopilot={autopilot} 
-          onAutopilotToggle={toggleAutopilot} 
-          isAutonomous={isAutonomous}
-          onAutonomousToggle={toggleAutonomous}
+        <MemoizedTaskbar 
           activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onSettingsClick={() => setIsSettingsOpen(true)}
-          onAction={handleAction}
-          layoutConfig={layoutConfig}
-          onLayoutChange={(newConfig) => {
-            setLayoutConfig(newConfig);
-            localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          onTabChange={(tab: any) => {
+            playSound('click');
+            setActiveTab(tab);
           }}
+          autopilot={autopilot}
+          threatLevel={threatLevel}
         />
       )}
 

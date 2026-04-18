@@ -5,6 +5,7 @@ export interface TerminalLine {
   type: 'info' | 'error' | 'success' | 'warning' | 'ai' | 'system' | 'output' | 'command';
   content: string;
   timestamp: string;
+  phase?: string; // Add phase property
 }
 
 export interface ChatMessage {

@@ -7,18 +7,28 @@ interface TerminalProps {
   lines: TerminalLine[];
   onCommand: (cmd: string) => void;
   onClear: () => void;
+  phase?: string;
 }
 
-export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear }) => {
+export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear, phase = 'RECON' }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestion, setSuggestion] = useState('');
   const [tabMatches, setTabMatches] = useState<string[]>([]);
   const [tabIndex, setTabIndex] = useState(-1);
   const [originalPrefix, setOriginalPrefix] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>(() => {
+    const saved = localStorage.getItem('sentinel_terminal_history');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [isValid, setIsValid] = useState(true);
+  const inputRef = useRef<HTMLInputElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
+
+  // Sync history to localStorage
+  useEffect(() => {
+    localStorage.setItem('sentinel_terminal_history', JSON.stringify(history));
+  }, [history]);
 
   useEffect(() => {
     if (outputRef.current) {
@@ -26,22 +36,41 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
     }
   }, [lines]);
 
+  // Focus only on mount and manual trigger
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const focusInput = () => {
+    inputRef.current?.focus();
+  };
+
   useEffect(() => {
     const trimmedInput = inputValue.trim();
     if (trimmedInput && tabIndex === -1) {
       const firstWord = trimmedInput.split(' ')[0].toLowerCase();
-      const matches = COMMANDS.filter(cmd => cmd.startsWith(firstWord));
-      setIsValid(matches.length > 0);
-      setTabMatches(matches);
+      
+      // Only offer autocomplete for the command itself (no spaces yet)
+      if (!inputValue.includes(' ')) {
+        const matches = COMMANDS.filter(cmd => cmd.startsWith(firstWord));
+        setIsValid(matches.length > 0);
+        setTabMatches(matches);
 
-      if (matches.length > 0) {
-        const match = matches[0];
-        if (match && match.startsWith(inputValue.toLowerCase()) && match !== inputValue.toLowerCase()) {
-          setSuggestion(match.slice(inputValue.length));
+        if (matches.length > 0) {
+          const match = matches[0];
+          if (match && match.startsWith(inputValue.toLowerCase()) && match !== inputValue.toLowerCase()) {
+            setSuggestion(match.slice(inputValue.length));
+          } else {
+            setSuggestion('');
+          }
         } else {
           setSuggestion('');
         }
       } else {
+        // If there's a space, they are typing arguments. Just validate the first word.
+        const isValidCmd = COMMANDS.includes(firstWord);
+        setIsValid(isValidCmd);
+        setTabMatches([]);
         setSuggestion('');
       }
     } else if (!trimmedInput) {
@@ -54,9 +83,14 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
   }, [inputValue, tabIndex]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && inputValue.trim()) {
+    if (e.key === 'Enter') {
       onCommand(inputValue);
-      setHistory(prev => [inputValue, ...prev].slice(0, 50));
+      if (inputValue.trim()) {
+        setHistory(prev => {
+          const newHistory = [inputValue, ...prev.filter(h => h !== inputValue)].slice(0, 50);
+          return newHistory;
+        });
+      }
       setHistoryIndex(-1);
       setInputValue('');
       setSuggestion('');
@@ -70,13 +104,21 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
     } else if (e.key === 'Tab') {
       e.preventDefault();
       if (tabMatches.length > 0) {
-        const nextIndex = (tabIndex + 1) % tabMatches.length;
-        if (tabIndex === -1) {
-          setOriginalPrefix(inputValue);
+        if (tabMatches.length === 1) {
+          // If only one match, just complete it
+          setInputValue(tabMatches[0]);
+          setSuggestion('');
+          setTabIndex(-1);
+        } else {
+          // Cycle through matches
+          const nextIndex = (tabIndex + 1) % tabMatches.length;
+          if (tabIndex === -1) {
+            setOriginalPrefix(inputValue);
+          }
+          setTabIndex(nextIndex);
+          setInputValue(tabMatches[nextIndex]);
+          setSuggestion('');
         }
-        setTabIndex(nextIndex);
-        setInputValue(tabMatches[nextIndex]);
-        setSuggestion('');
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -150,7 +192,8 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
 
       <div 
         ref={outputRef}
-        className="flex-1 overflow-y-auto p-4 px-5 font-mono text-sm leading-relaxed ltr text-left terminal-output"
+        onClick={focusInput}
+        className="flex-1 overflow-y-auto p-4 px-5 font-mono text-sm leading-relaxed ltr text-left terminal-output cursor-text"
         style={{ direction: 'ltr', textAlign: 'left' }}
       >
         {lines.map(line => (
@@ -160,7 +203,7 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
                 <span className="shrink-0">
                   <span className="text-[var(--accent-green)] font-bold">root@sentinel</span>
                   <span className="text-[var(--text-primary)]">:</span>
-                  <span className="text-[var(--accent-blue)]">~</span>
+                  <span className="text-[var(--accent-blue)]">[{line.phase || phase}]</span>
                   <span className="text-[var(--text-primary)]">#</span>
                 </span>
               ) : (
@@ -176,12 +219,18 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
           </div>
         ))}
         <div className="flex items-center gap-2 mt-2 relative">
-          <span className="text-[var(--accent-green)] font-bold">root@sentinel</span>
+          <div className="flex items-center gap-1">
+            <span className={`text-[9px] translate-y-[1px] ${isValid ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)] animate-pulse'}`}>
+              {isValid ? '●' : '○'}
+            </span>
+            <span className="text-[var(--accent-green)] font-bold">root@sentinel</span>
+          </div>
           <span className="text-[var(--text-primary)]">:</span>
-          <span className="text-[var(--accent-blue)]">~</span>
+          <span className="text-[var(--accent-blue)]">[{phase}]</span>
           <span className="text-[var(--text-primary)]">#</span>
           <div className="flex-1 relative">
             <input 
+              ref={inputRef}
               type="text"
               autoFocus
               value={inputValue}
@@ -191,29 +240,44 @@ export const Terminal: React.FC<TerminalProps> = ({ lines, onCommand, onClear })
                 setOriginalPrefix('');
               }}
               onKeyDown={handleKeyDown}
-              className={`w-full bg-transparent border-none font-mono text-sm outline-none relative z-10 transition-colors ${isValid ? 'text-[var(--text-primary)]' : 'text-[var(--accent-red)]'}`}
+              className="w-full bg-transparent border-none font-mono text-sm outline-none relative z-10 text-[var(--text-primary)]"
               spellCheck={false}
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
             />
             {suggestion && (
-              <div className="absolute left-0 top-0 text-[var(--text-muted)] opacity-50 font-mono text-sm pointer-events-none z-0">
-                <span className="invisible">{inputValue}</span>
+              <div 
+                className="absolute left-0 top-0 text-[var(--text-muted)] opacity-50 font-mono text-sm pointer-events-none z-0 whitespace-pre"
+              >
+                <span className="opacity-0">{inputValue}</span>
                 {suggestion}
               </div>
             )}
-            {tabMatches.length > 1 && (
-              <div className="absolute left-0 -top-8 flex gap-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] px-2 py-1 rounded-md text-[10px] z-50 animate-in fade-in slide-in-from-bottom-2">
-                <span className="text-[var(--accent-cyan)] font-bold uppercase tracking-tighter opacity-50">Suggestions:</span>
-                {tabMatches.map((match, i) => (
-                  <span 
-                    key={match} 
-                    className={`${i === tabIndex ? 'text-[var(--accent-cyan)] font-bold underline' : 'text-[var(--text-muted)]'}`}
-                  >
-                    {match}
-                  </span>
-                ))}
-              </div>
-            )}
+      {tabMatches.length > 1 && (
+        <div className="absolute left-0 -top-10 flex flex-wrap gap-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] px-3 py-2 rounded-lg shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 backdrop-blur-md max-w-[400px]">
+          <div className="w-full text-[9px] font-black uppercase tracking-widest text-[var(--accent-cyan)] mb-1 opacity-70 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-cyan)] animate-pulse" />
+            اقتراحات الأوامر (Command Suggestions)
+          </div>
+          {tabMatches.map((match, i) => (
+            <span 
+              key={match} 
+              className={`text-[10px] px-2 py-0.5 rounded font-mono transition-all ${
+                i === tabIndex 
+                  ? 'bg-[var(--accent-cyan)] text-[var(--bg-primary)] font-bold scale-110 shadow-[0_0_10px_rgba(0,240,255,0.3)]' 
+                  : 'text-[var(--text-secondary)] bg-[rgba(255,255,255,0.03)] border border-transparent'
+              }`}
+            >
+              {match}
+            </span>
+          ))}
+          <div className="w-full mt-1 pt-1 border-t border-[rgba(255,255,255,0.05)] text-[8px] text-[var(--text-muted)] flex justify-between">
+            <span>[TAB] للتنقل</span>
+            <span>[ENTER] للاختيار</span>
+          </div>
+        </div>
+      )}
           </div>
         </div>
       </div>

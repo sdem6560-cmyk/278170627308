@@ -41,7 +41,14 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({
     setIsAnalyzing(true);
     setRecommendation(null);
     try {
-      const result = await getExploitRecommendation(activeTarget, arsenal);
+      // Ensure target shape explicitly strings out the ports and services for the prompt
+      const targetPayload = {
+        ...activeTarget,
+        open_ports: activeTarget.ports || [],
+        running_services: activeTarget.services || []
+      };
+      
+      const result = await getExploitRecommendation(targetPayload, arsenal);
       setRecommendation(result);
     } catch (error) {
       console.error(error);

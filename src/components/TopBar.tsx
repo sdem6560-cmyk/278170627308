@@ -154,7 +154,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <button 
           onClick={onOpenSettings}
-          className="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] active:scale-95 transition-all shadow-lg hidden xs:flex items-center justify-center"
+          className="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] active:scale-95 transition-all shadow-lg flex items-center justify-center"
           title="إعدادات النظام"
         >
           <Settings size={18} />

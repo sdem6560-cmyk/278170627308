@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ChatMessage, AIThought } from '../types';
 import { getAIResponse, getSystemThoughts } from '../services/geminiService';
 
@@ -15,7 +15,7 @@ export const useAI = () => {
       const parsed = JSON.parse(saved);
       return parsed.map((m: any, i: number) => ({
         ...m,
-        id: m.id.includes('-') ? m.id : `${m.id}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
+        id: m.id && m.id.includes('-') ? m.id : `${m.id || 'chat'}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
       }));
     } catch {
       return initial as ChatMessage[];
@@ -33,12 +33,21 @@ export const useAI = () => {
       const parsed = JSON.parse(saved);
       return parsed.map((t: any, i: number) => ({
         ...t,
-        id: t.id.includes('-') ? t.id : `${t.id}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
+        id: t.id && t.id.includes('-') ? t.id : `${t.id || 'th'}-mig-${i}-${Math.random().toString(36).substring(2, 5)}`
       }));
     } catch {
       return initial as AIThought[];
     }
   });
+
+  // Save to localStorage
+  useEffect(() => {
+    localStorage.setItem('sentinel_chatMessages', JSON.stringify(chatMessages));
+  }, [chatMessages]);
+
+  useEffect(() => {
+    localStorage.setItem('sentinel_aiThoughts', JSON.stringify(aiThoughts));
+  }, [aiThoughts]);
 
   const handleAction = useCallback(async (text: string) => {
     const userMsg: ChatMessage = {

@@ -13,8 +13,8 @@ export const DEFAULT_MASTER_CONFIG = [
   { id: 'recon', name: 'استطلاع (RECON)', icon: 'Search', color: 'var(--accent-cyan)', cmd: 'recon' },
   { id: 'scan', name: 'مسح (SCAN)', icon: 'Activity', color: 'var(--accent-blue)', cmd: 'scan' },
   { id: 'vuln', name: 'ثغرات (VULN)', icon: 'Shield', color: 'var(--accent-orange)', cmd: 'vulnscan' },
-  { id: 'brute', name: 'قوة غاشمة (BRUTE)', icon: 'Lock', color: 'var(--accent-red)', cmd: 'brute' },
   { id: 'exploit', name: 'استغلال (EXPLOIT)', icon: 'Zap', color: 'var(--accent-yellow)', cmd: 'exploit' },
+  { id: 'live', name: 'بداء تشغيل مباشر لكل الأدوات', icon: 'Radio', color: 'var(--accent-red)', cmd: 'live' },
   { id: 'exfil', name: 'تسريب (EXFIL)', icon: 'Globe', color: 'var(--accent-purple)', cmd: 'exfiltrate' },
 ];
 

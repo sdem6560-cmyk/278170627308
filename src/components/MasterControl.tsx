@@ -44,7 +44,7 @@ export const MasterControl: React.FC<MasterControlProps> = ({ config, onAction, 
         { id: 'scan', name: 'مسح (SCAN)', icon: 'Activity', color: 'var(--accent-blue)', cmd: 'scan' },
         { id: 'vuln', name: 'ثغرات (VULN)', icon: 'Shield', color: 'var(--accent-orange)', cmd: 'vulnscan' },
         { id: 'exploit', name: 'استغلال (EXPLOIT)', icon: 'Zap', color: 'var(--accent-yellow)', cmd: 'exploit' },
-        { id: 'live', name: 'تشغيل مباشر (LIVE)', icon: 'Radio', color: 'var(--accent-red)', cmd: 'live' },
+        { id: 'live', name: 'بداء تشغيل مباشر لكل الأدوات', icon: 'Radio', color: 'var(--accent-red)', cmd: 'live' },
         { id: 'exfil', name: 'تسريب (EXFIL)', icon: 'Globe', color: 'var(--accent-purple)', cmd: 'exfiltrate' },
       ];
       onConfigChange(JSON.stringify(defaultConfig));
@@ -133,11 +133,11 @@ export const MasterControl: React.FC<MasterControlProps> = ({ config, onAction, 
   }
 
   return (
-    <div className="p-4 bg-[rgba(10,14,23,0.6)] border-b border-[var(--border-color)] backdrop-blur-md">
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-2 lg:px-4 bg-[rgba(10,14,23,0.6)] border-b border-[var(--border-color)] backdrop-blur-md">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <Terminal size={16} className="text-[var(--accent-cyan)]" />
-          <h3 className="text-[10px] font-black uppercase tracking-[2px] text-[var(--text-primary)]">لوحة التحكم الديناميكية (Dynamic Arsenal Panel)</h3>
+          <Terminal size={14} className="text-[var(--accent-cyan)]" />
+          <h3 className="text-[9px] font-black uppercase tracking-[1px] text-[var(--text-primary)]">لوحة التحكم الديناميكية</h3>
         </div>
         <div className="flex items-center gap-4">
           <button 
@@ -154,20 +154,20 @@ export const MasterControl: React.FC<MasterControlProps> = ({ config, onAction, 
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
         {actions.map((action) => {
           const Icon = iconMap[action.icon] || Terminal;
           return (
             <motion.button
               key={action.id}
-              whileHover={{ scale: 1.02, translateY: -2 }}
+              whileHover={{ scale: 1.01, translateY: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => onAction(action.cmd)}
-              className="flex flex-col items-center gap-2 p-3 rounded-lg bg-[rgba(255,255,255,0.02)] border border-[var(--border-color)] hover:border-[var(--accent-cyan)] hover:bg-[rgba(0,240,255,0.05)] transition-all group relative overflow-hidden"
+              className="flex flex-col items-center gap-1.5 p-2 rounded-md bg-[rgba(255,255,255,0.02)] border border-[var(--border-color)] hover:border-[var(--accent-cyan)] hover:bg-[rgba(0,240,255,0.05)] transition-all group relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-linear-to-br from-transparent via-[rgba(0,240,255,0.02)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Icon size={20} style={{ color: action.color }} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">{action.name}</span>
+              <Icon size={16} style={{ color: action.color }} className="group-hover:scale-110 transition-transform" />
+              <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] truncate max-w-full">{action.name}</span>
               
               {action.params && (
                 <button 

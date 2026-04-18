@@ -4,10 +4,12 @@ import { ArsenalItem } from "../types";
 const getAIInstance = () => {
   // Priority: User provided key in localStorage > Environment variable
   const userKey = localStorage.getItem('GEMINI_API_KEY');
-  const apiKey = userKey || process.env.GEMINI_API_KEY;
+  const apiKey = userKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : null);
   
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not defined. Please provide it in Settings.");
+    const error: any = new Error("مفتاح API الخاص بـ Gemini غير متوفر. يرجى إعداده في الإعدادات.");
+    error.isMissingKey = true;
+    throw error;
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -59,7 +61,12 @@ export async function getAutonomousAction(state: any) {
     });
     return JSON.parse(response.text || "{}");
   } catch (error: any) {
-    console.error("Autonomous Action Error:", error);
+    const errorMsg = error?.message || String(error);
+    if (errorMsg.includes("500") || errorMsg.includes("xhr error") || errorMsg.includes("UNKNOWN")) {
+      console.warn("[Sentinel AI] Autonomous Action: Backend proxy issue. Soft failing.");
+    } else {
+      console.error("Autonomous Action Error:", errorMsg);
+    }
     return null;
   }
 }
@@ -88,16 +95,31 @@ export async function getAIResponse(prompt: string, history: { role: 'user' | 'm
     });
     return response.text;
   } catch (error: any) {
+    if (error.isMissingKey) {
+      return "⚠️ خطأ: مفتاح Gemini API مفقود. يرجى الذهاب إلى الإعدادات وإدخال المفتاح لتفعيل الذكاء الاصطناعي.";
+    }
+
     const errorMsg = error?.message || String(error);
     const isQuotaError = errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED");
+    const isInvalidKey = errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("invalid-api-key") || errorMsg.includes("403");
+    const isNetworkError = errorMsg.includes("500") || errorMsg.includes("xhr error") || errorMsg.includes("UNKNOWN");
     
     if (isQuotaError) {
       setCooldown();
       return "عذراً أيها المشغل، النظام في وضع إعادة الشحن العصبي (Quota Exceeded). سأعود للعمل بكامل طاقتي قريباً.";
     }
+
+    if (isInvalidKey) {
+      return "⚠️ تنبيه: مفتاح API الخاص بـ Gemini غير صالح أو غير مصرح له. يرجى التحقق من صحة المفتاح في الإعدادات.";
+    }
     
-    console.error("Gemini API Error:", error);
-    return "عذراً، واجهت خطأ في الاتصال بالشبكة العصبية المركزية. جاري محاولة استعادة الاتصال...";
+    if (isNetworkError) {
+      console.warn("[Sentinel AI] Proxy/Network error during Chat generation. Soft failing.");
+    } else {
+      console.error("Gemini API Error:", errorMsg);
+    }
+    
+    return "عذراً، واجهت خطأ مؤقت في الاتصال بالشبكة العصبية المركزية (الخوادم مزدحمة). يرجى المحاولة بعد قليل...";
   }
 }
 
@@ -139,11 +161,14 @@ export async function getSystemThoughts(phase?: string, threatLevel?: number, ar
   } catch (error: any) {
     const errorMsg = error?.message || String(error);
     const isQuotaError = errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED");
+    const isNetworkError = errorMsg.includes("500") || errorMsg.includes("xhr error") || errorMsg.includes("UNKNOWN");
 
     if (isQuotaError) {
       setCooldown();
+    } else if (isNetworkError) {
+      console.warn("[Sentinel AI] 500/XHR Error while fetching system thoughts. Switching to fallback mode.");
     } else {
-      console.error("Gemini Thought Error:", error);
+      console.error("Gemini Thought Error:", errorMsg);
     }
     
     // Return random selection from fallback thoughts on error
@@ -162,22 +187,27 @@ export async function getExploitRecommendation(target: any, arsenal: ArsenalItem
       contents: `Target Data: ${JSON.stringify(target)}
       Available Arsenal: ${JSON.stringify(arsenal)}
       
-      Analyze the target's OS, ports, and vulnerabilities. Recommend the best exploit from the arsenal.
-      Return a JSON object with:
+      Analyze the target's specific OS, open ports (crucial), running services (crucial), and potential vulnerabilities. Based heavily on the exposed ports and services, recommend the single best exploit tool from the provided Arsenal.
+      Return a JSON object with strictly this structure:
       {
-        "recommendation": "Technical reasoning in Arabic",
+        "recommendation": "Technical reasoning in Arabic for why this tool fits the specific exposed ports/services",
         "exploitId": "The ID of the recommended arsenal item",
         "confidence": 0.95,
         "riskLevel": "low/medium/high"
       }`,
       config: {
-        systemInstruction: "You are the Tactical Offensive Specialist of Sentinel OS. Your goal is to select the most effective exploit for a given target based on technical data. Be precise and technical.",
+        systemInstruction: "You are the Tactical Offensive Specialist of Sentinel OS. Your goal is to select the most effective exploit for a given target based strictly on its exposed ports and services. Be precise and technical.",
         responseMimeType: "application/json",
       },
     });
     return JSON.parse(response.text || "{}");
   } catch (error: any) {
-    console.error("Exploit Recommendation Error:", error);
+    const errorMsg = error?.message || String(error);
+    if (errorMsg.includes("500") || errorMsg.includes("xhr error") || errorMsg.includes("UNKNOWN")) {
+      console.warn("[Sentinel AI] Exploit Recommendation: Proxy 500 Error. Fallback invoked.");
+    } else {
+      console.error("Exploit Recommendation Error:", errorMsg);
+    }
     return null;
   }
 }

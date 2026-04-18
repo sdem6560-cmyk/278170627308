@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as LucideIcons from 'lucide-react';
-import { X, Settings, Shield, Bell, Monitor, Database, Lock, Cpu, Key, Eye, EyeOff, Globe, Plus, Trash2, RefreshCw, Zap, Layout, Brain, Keyboard } from 'lucide-react';
+import { X, Settings, Shield, Bell, Monitor, Database, Lock, Cpu, Key, Eye, EyeOff, Globe, Plus, Trash2, RefreshCw, Zap, Layout, Brain, Keyboard, SlidersHorizontal } from 'lucide-react';
 import { ThreatFeed, LayoutConfig } from '../types';
 import { DEFAULT_FEEDS, DEFAULT_LAYOUT_CONFIG } from '../constants';
 
@@ -282,7 +282,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                     { id: 'showBottomBar', name: 'الشريط السفلي', icon: Layout },
                     { id: 'showSystemStatus', name: 'حالة النظام', icon: Cpu },
                     { id: 'showNeuralCoPilot', name: 'المساعد العصبي', icon: Zap },
-                    { id: 'showMasterControl', name: 'لوحة التحكم الرئيسية', icon: Settings },
+                    { id: 'showMasterControl', name: 'لوحة التحكم الديناميكية', icon: SlidersHorizontal },
                   ].map((item) => (
                     <div 
                       key={item.id}

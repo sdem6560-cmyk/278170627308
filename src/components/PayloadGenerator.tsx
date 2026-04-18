@@ -18,6 +18,14 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
   const [generatedPayload, setGeneratedPayload] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState<{ lhost?: string; lport?: string }>({});
+  const [touched, setTouched] = useState<{ lhost?: boolean; lport?: boolean }>({});
+
+  // Real-time validation
+  React.useEffect(() => {
+    if (touched.lhost || touched.lport) {
+      validateInputs();
+    }
+  }, [lhost, lport]);
 
   const validateInputs = () => {
     const newErrors: { lhost?: string; lport?: string } = {};
@@ -25,18 +33,21 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
     // Validate LHOST (IP or Hostname)
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     const hostRegex = /^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/;
-    if (!lhost) {
-      newErrors.lhost = 'LHOST مطلوب';
-    } else if (!ipRegex.test(lhost) && !hostRegex.test(lhost)) {
-      newErrors.lhost = 'عنوان IP أو Hostname غير صالح';
+    
+    if (!lhost.trim()) {
+      newErrors.lhost = 'العنوان (LHOST) مطلوب';
+    } else if (!ipRegex.test(lhost.trim()) && !hostRegex.test(lhost.trim())) {
+      newErrors.lhost = 'يرجى إدخال عنوان IP صحيح أو Hostname صالح';
     }
 
     // Validate LPORT (1-65535)
     const portNum = parseInt(lport);
-    if (!lport) {
-      newErrors.lport = 'LPORT مطلوب';
-    } else if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      newErrors.lport = 'المنفذ يجب أن يكون بين 1 و 65535';
+    if (!lport.trim()) {
+      newErrors.lport = 'المنفذ (LPORT) مطلوب';
+    } else if (isNaN(portNum)) {
+      newErrors.lport = 'المنفذ يجب أن يكون رقماً';
+    } else if (portNum < 1 || portNum > 65535) {
+      newErrors.lport = 'المنفذ خارج النطاق المسموح (1-65535)';
     }
 
     setErrors(newErrors);
@@ -44,8 +55,9 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
   };
 
   const handleGenerate = () => {
+    setTouched({ lhost: true, lport: true });
     if (!validateInputs()) {
-      setStatusMessage('خطأ في الإدخال: يرجى التحقق من LHOST و LPORT');
+      setStatusMessage('خطأ: تأكد من صحة بيانات الاتصال أولاً');
       return;
     }
 
@@ -205,42 +217,78 @@ export const PayloadGenerator: React.FC<PayloadGeneratorProps> = ({ onAction }) 
             
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">LHOST (Local IP)</label>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)] flex justify-between">
+                  <span>LHOST (Local IP)</span>
+                  {touched.lhost && errors.lhost && <span className="text-[var(--accent-red)] animate-pulse">! مسار غير صالح</span>}
+                </label>
                 <input 
                   type="text"
                   value={lhost}
-                  onChange={(e) => {
-                    setLhost(e.target.value);
-                    if (errors.lhost) setErrors({ ...errors, lhost: undefined });
-                  }}
-                  className={`w-full bg-[var(--bg-input)] border ${errors.lhost ? 'border-[var(--accent-red)]' : 'border-[var(--border-color)]'} rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-colors`}
+                  onChange={(e) => setLhost(e.target.value)}
+                  onBlur={() => setTouched(prev => ({ ...prev, lhost: true }))}
+                  placeholder="192.168.1.10"
+                  className={`w-full bg-[var(--bg-input)] border ${touched.lhost && errors.lhost ? 'border-[var(--accent-red)] shadow-[0_0_8px_rgba(255,51,102,0.2)]' : 'border-[var(--border-color)]'} rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-all`}
                 />
-                {errors.lhost && <p className="text-[9px] text-[var(--accent-red)] font-bold">{errors.lhost}</p>}
+                {touched.lhost && errors.lhost && (
+                  <motion.p 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="text-[9px] text-[var(--accent-red)] font-bold mt-1"
+                  >
+                    {errors.lhost}
+                  </motion.p>
+                )}
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">LPORT (Local Port)</label>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)] flex justify-between">
+                  <span>LPORT (Local Port)</span>
+                  {touched.lport && errors.lport && <span className="text-[var(--accent-red)] animate-pulse">! خطأ في المنفذ</span>}
+                </label>
                 <input 
                   type="text"
                   value={lport}
-                  onChange={(e) => {
-                    setLport(e.target.value);
-                    if (errors.lport) setErrors({ ...errors, lport: undefined });
-                  }}
-                  className={`w-full bg-[var(--bg-input)] border ${errors.lport ? 'border-[var(--accent-red)]' : 'border-[var(--border-color)]'} rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-colors`}
+                  onChange={(e) => setLport(e.target.value)}
+                  onBlur={() => setTouched(prev => ({ ...prev, lport: true }))}
+                  placeholder="4444"
+                  className={`w-full bg-[var(--bg-input)] border ${touched.lport && errors.lport ? 'border-[var(--accent-red)] shadow-[0_0_8px_rgba(255,51,102,0.2)]' : 'border-[var(--border-color)]'} rounded-md px-3 py-2 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-[var(--accent-cyan)] transition-all`}
                 />
-                {errors.lport && <p className="text-[9px] text-[var(--accent-red)] font-bold">{errors.lport}</p>}
+                {touched.lport && errors.lport && (
+                  <motion.p 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="text-[9px] text-[var(--accent-red)] font-bold mt-1"
+                  >
+                    {errors.lport}
+                  </motion.p>
+                )}
               </div>
             </div>
           </div>
 
-          <button 
+          <motion.button 
             onClick={handleGenerate}
             disabled={isGenerating}
-            className="w-full py-3 bg-[rgba(255,136,0,0.1)] border border-[rgba(255,136,0,0.2)] text-[var(--accent-orange)] rounded-md text-[11px] font-black uppercase tracking-[2px] hover:bg-[var(--accent-orange)] hover:text-[var(--bg-primary)] transition-all active:scale-95 disabled:opacity-50"
+            animate={touched.lhost && (errors.lhost || errors.lport) ? { x: [0, -4, 4, -4, 4, 0] } : {}}
+            transition={{ duration: 0.4 }}
+            className={`w-full py-3 ${
+              touched.lhost && (errors.lhost || errors.lport) 
+                ? 'bg-[rgba(255,51,102,0.1)] border-[rgba(255,51,102,0.3)] text-[var(--accent-red)]' 
+                : 'bg-[rgba(255,136,0,0.1)] border-[rgba(255,136,0,0.2)] text-[var(--accent-orange)]'
+            } border rounded-md text-[11px] font-black uppercase tracking-[2px] hover:brightness-110 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2`}
           >
-            {isGenerating ? 'جاري التوليد...' : 'توليد الحمولة (GENERATE)'}
-          </button>
+            {isGenerating ? (
+              <>
+                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                جاري التوليد...
+              </>
+            ) : (
+              <>
+                <Zap size={14} />
+                توليد الحمولة (GENERATE)
+              </>
+            )}
+          </motion.button>
         </div>
 
         {/* Output Panel */}

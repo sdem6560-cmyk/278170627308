@@ -28,6 +28,7 @@ import { useThreatIntelligence } from './hooks/useThreatIntelligence';
 import { useAI } from './hooks/useAI';
 import { getAIResponse, getSystemThoughts, getAutonomousAction } from './services/geminiService';
 import { fetchShodanDetails, fetchVirusTotalReport } from './services/threatIntelService';
+import { readStorageJson, readStorageString, writeStorageJson } from './lib/persistence';
 
 // Memoized components for performance
 const MemoizedTopBar = React.memo(TopBar);
@@ -45,13 +46,13 @@ export default function App() {
   const [opCount, setOpCount] = useState(124);
   const [autopilot, setAutopilot] = useState(true);
   const [activeTargetId, setActiveTargetId] = useState<string | null>(() => {
-    return localStorage.getItem('sentinel_activeTargetId') || 't1';
+    return readStorageString('sentinel_activeTargetId', 't1');
   });
   const [isBooting, setIsBooting] = useState(true);
   const [bootProgress, setBootProgress] = useState(0);
   const [bootLogs, setBootLogs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'ZERODAY' | 'DESKTOP' | 'FILES' | 'PROCESSES'>(() => {
-    return (localStorage.getItem('sentinel_activeTab') as any) || 'DESKTOP';
+    return readStorageString('sentinel_activeTab', 'DESKTOP') as any;
   });
   const [runningProcesses, setRunningProcesses] = useState<{id: string, name: string, startTime: string}[]>([
     { id: 'p_kernel', name: 'Kernel_Alpha_v4', startTime: new Date().toLocaleTimeString() }
@@ -65,8 +66,8 @@ export default function App() {
   const [isAutonomous, setIsAutonomous] = useState(false);
   const [lastAiThought, setLastAiThought] = useState<string>('جاري تهيئة العقل الاصطناعي...');
   const [files, setFiles] = useState<FileItem[]>(() => {
-    const saved = localStorage.getItem('sentinel_files');
-    if (saved) return JSON.parse(saved);
+    const persistedFiles = readStorageJson<FileItem[] | null>('sentinel_files', null);
+    if (persistedFiles) return persistedFiles;
     return [
       {
         id: 'f1',
@@ -143,22 +144,19 @@ export default function App() {
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [masterConfig, setMasterConfig] = useState<string>(() => {
-    return localStorage.getItem('sentinel_master_config') || JSON.stringify(DEFAULT_MASTER_CONFIG);
+    return readStorageString('sentinel_master_config', JSON.stringify(DEFAULT_MASTER_CONFIG));
   });
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
-    const saved = localStorage.getItem('sentinel_auto_update');
-    return saved !== null ? JSON.parse(saved) : true;
+    return readStorageJson<boolean>('sentinel_auto_update', true);
   });
   const [updateInterval, setUpdateInterval] = useState(() => {
-    const saved = localStorage.getItem('sentinel_update_interval');
-    return saved !== null ? JSON.parse(saved) : 60;
+    return readStorageJson<number>('sentinel_update_interval', 60);
   });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>(() => {
-    const saved = localStorage.getItem('sentinel_layout_config');
-    if (!saved) return DEFAULT_LAYOUT_CONFIG;
+    const parsed = readStorageJson<LayoutConfig | null>('sentinel_layout_config', null);
+    if (!parsed) return DEFAULT_LAYOUT_CONFIG;
     try {
-      const parsed = JSON.parse(saved);
       // Merge saved with default to handle schema upgrades
       return {
         ...DEFAULT_LAYOUT_CONFIG,
@@ -210,7 +208,6 @@ export default function App() {
   ]);
 
   const [arsenal, setArsenal] = useState<ArsenalItem[]>(() => {
-    const saved = localStorage.getItem('sentinel_arsenal');
     const initial: ArsenalItem[] = [
       { 
         id: 'a1', 
@@ -377,7 +374,8 @@ export default function App() {
       },
       { id: 'a18', name: 'ProxyChains', desc: 'توجيه الحركة عبر وكلاء (Tor/Socks)', type: 'util' }
     ];
-    return saved ? JSON.parse(saved) : initial;
+    const persistedArsenal = readStorageJson<ArsenalItem[] | null>('sentinel_arsenal', null);
+    return persistedArsenal ?? initial;
   });
 
   const updateArsenalParam = (itemId: string, paramId: string, newValue: any) => {
@@ -454,7 +452,7 @@ export default function App() {
         }
         return folder;
       });
-      localStorage.setItem('sentinel_files', JSON.stringify(newFiles));
+      writeStorageJson('sentinel_files', newFiles);
       return newFiles;
     });
   }, []);

@@ -28,6 +28,7 @@ import { useThreatIntelligence } from './hooks/useThreatIntelligence';
 import { useAI } from './hooks/useAI';
 import { getAIResponse, getSystemThoughts, getAutonomousAction } from './services/geminiService';
 import { fetchShodanDetails, fetchVirusTotalReport } from './services/threatIntelService';
+import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from './lib/persistence';
 
 // Memoized components for performance
 const MemoizedTopBar = React.memo(TopBar);
@@ -45,13 +46,13 @@ export default function App() {
   const [opCount, setOpCount] = useState(124);
   const [autopilot, setAutopilot] = useState(true);
   const [activeTargetId, setActiveTargetId] = useState<string | null>(() => {
-    return localStorage.getItem('sentinel_activeTargetId') || 't1';
+    return readStorageString('sentinel_activeTargetId', 't1');
   });
   const [isBooting, setIsBooting] = useState(true);
   const [bootProgress, setBootProgress] = useState(0);
   const [bootLogs, setBootLogs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'TERMINAL' | 'AI' | 'TARGETS' | 'THREATS' | 'FEEDS' | 'VAULT' | 'PAYLOAD' | 'ZERODAY' | 'DESKTOP' | 'FILES' | 'PROCESSES'>(() => {
-    return (localStorage.getItem('sentinel_activeTab') as any) || 'DESKTOP';
+    return readStorageString('sentinel_activeTab', 'DESKTOP') as any;
   });
   const [runningProcesses, setRunningProcesses] = useState<{id: string, name: string, startTime: string}[]>([
     { id: 'p_kernel', name: 'Kernel_Alpha_v4', startTime: new Date().toLocaleTimeString() }
@@ -65,8 +66,8 @@ export default function App() {
   const [isAutonomous, setIsAutonomous] = useState(false);
   const [lastAiThought, setLastAiThought] = useState<string>('جاري تهيئة العقل الاصطناعي...');
   const [files, setFiles] = useState<FileItem[]>(() => {
-    const saved = localStorage.getItem('sentinel_files');
-    if (saved) return JSON.parse(saved);
+    const persistedFiles = readStorageJson<FileItem[] | null>('sentinel_files', null);
+    if (persistedFiles) return persistedFiles;
     return [
       {
         id: 'f1',
@@ -143,22 +144,19 @@ export default function App() {
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [masterConfig, setMasterConfig] = useState<string>(() => {
-    return localStorage.getItem('sentinel_master_config') || JSON.stringify(DEFAULT_MASTER_CONFIG);
+    return readStorageString('sentinel_master_config', JSON.stringify(DEFAULT_MASTER_CONFIG));
   });
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
-    const saved = localStorage.getItem('sentinel_auto_update');
-    return saved !== null ? JSON.parse(saved) : true;
+    return readStorageJson<boolean>('sentinel_auto_update', true);
   });
   const [updateInterval, setUpdateInterval] = useState(() => {
-    const saved = localStorage.getItem('sentinel_update_interval');
-    return saved !== null ? JSON.parse(saved) : 60;
+    return readStorageJson<number>('sentinel_update_interval', 60);
   });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>(() => {
-    const saved = localStorage.getItem('sentinel_layout_config');
-    if (!saved) return DEFAULT_LAYOUT_CONFIG;
+    const parsed = readStorageJson<LayoutConfig | null>('sentinel_layout_config', null);
+    if (!parsed) return DEFAULT_LAYOUT_CONFIG;
     try {
-      const parsed = JSON.parse(saved);
       // Merge saved with default to handle schema upgrades
       return {
         ...DEFAULT_LAYOUT_CONFIG,
@@ -210,7 +208,6 @@ export default function App() {
   ]);
 
   const [arsenal, setArsenal] = useState<ArsenalItem[]>(() => {
-    const saved = localStorage.getItem('sentinel_arsenal');
     const initial: ArsenalItem[] = [
       { 
         id: 'a1', 
@@ -377,7 +374,8 @@ export default function App() {
       },
       { id: 'a18', name: 'ProxyChains', desc: 'توجيه الحركة عبر وكلاء (Tor/Socks)', type: 'util' }
     ];
-    return saved ? JSON.parse(saved) : initial;
+    const persistedArsenal = readStorageJson<ArsenalItem[] | null>('sentinel_arsenal', null);
+    return persistedArsenal ?? initial;
   });
 
   const updateArsenalParam = (itemId: string, paramId: string, newValue: any) => {
@@ -454,19 +452,18 @@ export default function App() {
         }
         return folder;
       });
-      localStorage.setItem('sentinel_files', JSON.stringify(newFiles));
+      writeStorageJson('sentinel_files', newFiles);
       return newFiles;
     });
   }, []);
 
   const [radar, setRadar] = useState<RadarEvent[]>(() => {
-    const saved = localStorage.getItem('sentinel_radar');
     const initial = [
       { id: 'r1', time: '04:34:55', message: 'تم اكتشاف منفذ مفتوح <span class="highlight">80/TCP</span> على الهدف Alpha' },
       { id: 'r2', time: '04:35:02', message: 'محاولة استطلاع من عنوان IP خارجي <span class="highlight">45.22.11.9</span>' },
       { id: 'r3', time: '05:11:00', message: 'تم دمج منصة <span class="highlight">ANDRAX</span> بنجاح في النظام' },
     ];
-    return saved ? JSON.parse(saved) : initial;
+    return readStorageJson<RadarEvent[]>('sentinel_radar', initial);
   });
 
   // Persistence
@@ -483,11 +480,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (activeTargetId) localStorage.setItem('sentinel_activeTargetId', activeTargetId);
+    if (activeTargetId) writeStorageString('sentinel_activeTargetId', activeTargetId);
   }, [activeTargetId]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_activeTab', activeTab);
+    writeStorageString('sentinel_activeTab', activeTab);
   }, [activeTab]);
 
   useEffect(() => {
@@ -509,15 +506,15 @@ export default function App() {
   }, [logSystemError]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_layout_config', JSON.stringify(layoutConfig));
+    writeStorageJson('sentinel_layout_config', layoutConfig);
   }, [layoutConfig]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_arsenal', JSON.stringify(arsenal));
+    writeStorageJson('sentinel_arsenal', arsenal);
   }, [arsenal]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_radar', JSON.stringify(radar));
+    writeStorageJson('sentinel_radar', radar);
   }, [radar]);
 
   // Periodic thoughts update
@@ -698,8 +695,8 @@ export default function App() {
           setVulnerabilities(prev => [newVuln, ...prev]);
           addTerminalLine(`VULNERABILITY DETECTED: ${newVuln.cve} (${newVuln.severity})`, 'error');
 
-          const shodanKey = localStorage.getItem('sentinel_shodan_key');
-          const vtKey = localStorage.getItem('sentinel_vt_key');
+          const shodanKey = readStorageString('sentinel_shodan_key', '');
+          const vtKey = readStorageString('sentinel_vt_key', '');
 
           if (shodanKey || vtKey) {
             addTerminalLine('Enriching vulnerability data with external threat intelligence...', 'info');
@@ -966,14 +963,14 @@ export default function App() {
         e.preventDefault();
         setLayoutConfig(prev => {
           const newConfig = { ...prev, showSidebarLeft: !prev.showSidebarLeft };
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
           return newConfig;
         });
       } else if (e.key === shortcuts.toggleSidebarRight) {
         e.preventDefault();
         setLayoutConfig(prev => {
           const newConfig = { ...prev, showSidebarRight: !prev.showSidebarRight };
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
           return newConfig;
         });
       }
@@ -1145,7 +1142,7 @@ export default function App() {
           onAction={handleCommand} 
           onConfigChange={(newConfig) => {
             setMasterConfig(newConfig);
-            localStorage.setItem('sentinel_master_config', newConfig);
+            writeStorageString('sentinel_master_config', newConfig);
             addTerminalLine('Arsenal configuration updated and synced.', 'success');
           }}
         />
@@ -1253,7 +1250,7 @@ export default function App() {
                             }));
                           };
                           const n = removeRecursive(prev);
-                          localStorage.setItem('sentinel_files', JSON.stringify(n));
+                          writeStorageJson('sentinel_files', n);
                           return n;
                         });
                       }}
@@ -1461,7 +1458,7 @@ export default function App() {
         onClick={() => {
           const newConfig = { ...layoutConfig, stealthMode: !layoutConfig.stealthMode };
           setLayoutConfig(newConfig);
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
         }}
         className={`fixed bottom-24 right-6 z-[1000] p-3 rounded-full border transition-all duration-500 shadow-lg flex items-center gap-2 group ${
           layoutConfig.stealthMode 
@@ -1493,15 +1490,13 @@ export default function App() {
         onClose={() => {
           setIsSettingsOpen(false);
           // Refresh settings from localStorage
-          const savedAutoUpdate = localStorage.getItem('sentinel_auto_update');
-          if (savedAutoUpdate !== null) setAutoUpdateEnabled(JSON.parse(savedAutoUpdate));
-          const savedInterval = localStorage.getItem('sentinel_update_interval');
-          if (savedInterval) setUpdateInterval(JSON.parse(savedInterval));
+          setAutoUpdateEnabled(readStorageJson<boolean>('sentinel_auto_update', true));
+          setUpdateInterval(readStorageJson<number>('sentinel_update_interval', 60));
         }} 
         layoutConfig={layoutConfig}
         onLayoutChange={(newConfig) => {
           setLayoutConfig(newConfig);
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
         }}
       />
 

@@ -458,13 +458,12 @@ export default function App() {
   }, []);
 
   const [radar, setRadar] = useState<RadarEvent[]>(() => {
-    const saved = localStorage.getItem('sentinel_radar');
     const initial = [
       { id: 'r1', time: '04:34:55', message: 'تم اكتشاف منفذ مفتوح <span class="highlight">80/TCP</span> على الهدف Alpha' },
       { id: 'r2', time: '04:35:02', message: 'محاولة استطلاع من عنوان IP خارجي <span class="highlight">45.22.11.9</span>' },
       { id: 'r3', time: '05:11:00', message: 'تم دمج منصة <span class="highlight">ANDRAX</span> بنجاح في النظام' },
     ];
-    return saved ? JSON.parse(saved) : initial;
+    return readStorageJson<RadarEvent[]>('sentinel_radar', initial);
   });
 
   // Persistence
@@ -507,15 +506,15 @@ export default function App() {
   }, [logSystemError]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_layout_config', JSON.stringify(layoutConfig));
+    writeStorageJson('sentinel_layout_config', layoutConfig);
   }, [layoutConfig]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_arsenal', JSON.stringify(arsenal));
+    writeStorageJson('sentinel_arsenal', arsenal);
   }, [arsenal]);
 
   useEffect(() => {
-    localStorage.setItem('sentinel_radar', JSON.stringify(radar));
+    writeStorageJson('sentinel_radar', radar);
   }, [radar]);
 
   // Periodic thoughts update
@@ -964,14 +963,14 @@ export default function App() {
         e.preventDefault();
         setLayoutConfig(prev => {
           const newConfig = { ...prev, showSidebarLeft: !prev.showSidebarLeft };
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
           return newConfig;
         });
       } else if (e.key === shortcuts.toggleSidebarRight) {
         e.preventDefault();
         setLayoutConfig(prev => {
           const newConfig = { ...prev, showSidebarRight: !prev.showSidebarRight };
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
           return newConfig;
         });
       }
@@ -1251,7 +1250,7 @@ export default function App() {
                             }));
                           };
                           const n = removeRecursive(prev);
-                          localStorage.setItem('sentinel_files', JSON.stringify(n));
+                          writeStorageJson('sentinel_files', n);
                           return n;
                         });
                       }}
@@ -1459,7 +1458,7 @@ export default function App() {
         onClick={() => {
           const newConfig = { ...layoutConfig, stealthMode: !layoutConfig.stealthMode };
           setLayoutConfig(newConfig);
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
         }}
         className={`fixed bottom-24 right-6 z-[1000] p-3 rounded-full border transition-all duration-500 shadow-lg flex items-center gap-2 group ${
           layoutConfig.stealthMode 
@@ -1491,15 +1490,13 @@ export default function App() {
         onClose={() => {
           setIsSettingsOpen(false);
           // Refresh settings from localStorage
-          const savedAutoUpdate = localStorage.getItem('sentinel_auto_update');
-          if (savedAutoUpdate !== null) setAutoUpdateEnabled(JSON.parse(savedAutoUpdate));
-          const savedInterval = localStorage.getItem('sentinel_update_interval');
-          if (savedInterval) setUpdateInterval(JSON.parse(savedInterval));
+          setAutoUpdateEnabled(readStorageJson<boolean>('sentinel_auto_update', true));
+          setUpdateInterval(readStorageJson<number>('sentinel_update_interval', 60));
         }} 
         layoutConfig={layoutConfig}
         onLayoutChange={(newConfig) => {
           setLayoutConfig(newConfig);
-          localStorage.setItem('sentinel_layout_config', JSON.stringify(newConfig));
+          writeStorageJson('sentinel_layout_config', newConfig);
         }}
       />
 
